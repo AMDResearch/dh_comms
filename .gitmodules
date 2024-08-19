@@ -1,3 +1,0 @@
-[submodule "hip_utils"]
-	path = hip_utils
-	url = git@github.amd.com:rasw/hip_utils.git
