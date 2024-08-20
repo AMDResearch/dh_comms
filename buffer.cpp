@@ -16,6 +16,7 @@ namespace
     constexpr size_t max_cu_per_se = 16; // 4 bits
     constexpr size_t max_cu_per_device = max_xcc * max_se_per_xcc * max_cu_per_se;
     constexpr uint16_t all_ones = 0xffff;
+    constexpr bool shared_buffers_are_host_pinned = false;
 
     /***
      * Returns the number of compute units of the active HIP device
@@ -93,12 +94,25 @@ namespace
         return cu_to_index_map;
     }
 
+
     void *allocate_buffer(size_t no_sub_buffers, size_t packets_per_sub_buffer)
     {
         void *buffer;
         std::size_t size = no_sub_buffers * packets_per_sub_buffer * dh_comms::bytes_per_packet;
-        printf("Allocating %lu bytes for %lu sub-buffers\n", size, no_sub_buffers);
-        CHK_HIP_ERR(hipMalloc(&buffer, size));
+        printf("%s:%d:\n\t Allocating %lu bytes for %lu sub-buffers "
+               "(%lu %lu-byte packets/sub-buffer)\n",
+               __FILE__, __LINE__, size, no_sub_buffers, packets_per_sub_buffer, dh_comms::bytes_per_packet);
+        std::vector<char> zeros(size);
+        if constexpr (shared_buffers_are_host_pinned)
+        {
+            CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
+            std::copy(zeros.cbegin(), zeros.cend(), (char*) buffer);
+        }
+        else
+        {
+            CHK_HIP_ERR(hipMalloc(&buffer, size));
+            CHK_HIP_ERR(hipMemcpy(buffer, zeros.data(), size, hipMemcpyHostToDevice));
+        }
         return buffer;
     }
 
@@ -113,7 +127,16 @@ namespace dh_comms
           cu_to_index_map_(invert_map(index_to_cu_map_)),
           buffer_(allocate_buffer(no_sub_buffers_, packets_per_sub_buffer))
     {
-        // Body intentionally empty
+        if constexpr (shared_buffers_are_host_pinned)
+        {
+            printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in pinned host memory\n",
+                   __FILE__, __LINE__);
+        }
+        else
+        {
+            printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
+                   __FILE__, __LINE__);
+        }
     }
 
     buffer::~buffer()
