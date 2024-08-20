@@ -16,7 +16,7 @@ namespace
     constexpr size_t max_cu_per_se = 16; // 4 bits
     constexpr size_t max_cu_per_device = max_xcc * max_se_per_xcc * max_cu_per_se;
     constexpr uint16_t all_ones = 0xffff;
-    constexpr bool shared_buffers_are_host_pinned = false;
+    constexpr bool shared_buffers_are_host_pinned = true;
 
     /***
      * Returns the number of compute units of the active HIP device
@@ -95,13 +95,9 @@ namespace
     }
 
 
-    void *allocate_buffer(size_t no_sub_buffers, size_t packets_per_sub_buffer)
+    void *allocate_shared_buffer(size_t size)
     {
         void *buffer;
-        std::size_t size = no_sub_buffers * packets_per_sub_buffer * dh_comms::bytes_per_packet;
-        printf("%s:%d:\n\t Allocating %lu bytes for %lu sub-buffers "
-               "(%lu %lu-byte packets/sub-buffer)\n",
-               __FILE__, __LINE__, size, no_sub_buffers, packets_per_sub_buffer, dh_comms::bytes_per_packet);
         std::vector<char> zeros(size);
         if constexpr (shared_buffers_are_host_pinned)
         {
@@ -116,6 +112,15 @@ namespace
         return buffer;
     }
 
+    template<typename T>
+    T* clone_to_device(const std::vector<T>& host_vec){
+        T* buffer;
+        size_t size = host_vec.size() * sizeof(T);
+        CHK_HIP_ERR(hipMalloc(&buffer, size));
+        CHK_HIP_ERR(hipMemcpy(buffer, host_vec.data(), size, hipMemcpyHostToDevice));
+        return buffer;
+    }
+
 } // unnamed namespace
 
 namespace dh_comms
@@ -123,9 +128,12 @@ namespace dh_comms
 
     buffer::buffer(std::size_t packets_per_sub_buffer)
         : no_sub_buffers_(get_cu_count()),
+          packets_per_sub_buffer_(packets_per_sub_buffer),
           index_to_cu_map_(determine_index_to_cu_map()),
           cu_to_index_map_(invert_map(index_to_cu_map_)),
-          buffer_(allocate_buffer(no_sub_buffers_, packets_per_sub_buffer))
+          packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
+          cu_to_index_map_d_(clone_to_device(index_to_cu_map_)),
+          atomic_flags_((decltype(atomic_flags_)) allocate_shared_buffer(no_sub_buffers_* sizeof(decltype(*atomic_flags_))))
     {
         if constexpr (shared_buffers_are_host_pinned)
         {
@@ -141,7 +149,9 @@ namespace dh_comms
 
     buffer::~buffer()
     {
-        CHK_HIP_ERR(hipFree(buffer_));
+        CHK_HIP_ERR(hipFree(atomic_flags_));
+        CHK_HIP_ERR(hipFree(cu_to_index_map_d_));
+        CHK_HIP_ERR(hipFree(packet_buffer_));
     }
 
     void buffer::print_cu_to_index_map() const
