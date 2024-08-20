@@ -17,7 +17,6 @@ namespace
     constexpr size_t max_cu_per_device = max_xcc * max_se_per_xcc * max_cu_per_se;
     constexpr uint16_t all_ones = 0xffff;
 
-
     /***
      * Returns the number of compute units of the active HIP device
      */
@@ -34,35 +33,12 @@ namespace
      * This function takes the cu id, and prints the XCC, SE and CU
      * values, separated by colons.
      */
-    void print_cu_index(uint16_t cu_id)
+    void print_cu_id(uint16_t cu_id)
     {
         uint16_t xcc = (cu_id & 0x780) >> 7;
         uint16_t se = (cu_id & 0x70) >> 4;
         uint16_t cu = (cu_id & 0xf);
         printf("%02u:%02u:%02u", xcc, se, cu);
-    }
-
-    /***
-     * A CU id is an 11-bit value comprised of 4 bits for the XCC,
-     * 3 bits for the SE on the XCC, and 4 bits for the CU on the SE.
-     * Not all 11-bit values correspond to an existing CU. For instance,
-     * on some devices the number of CUs per SE is lower than 16.
-     * All valid 11-bit values for the devices are mapped, in order, to
-     * consecutive indices: the first valid 11-bit CU id gets index 0, the
-     * next valid 11-bit CU id gets index 1, and so on.
-     * This function prints the mapping from CU ids to index values.
-     */
-    void print_cu_to_index_map(const std::vector<uint16_t>& cu_to_index_map)
-    {
-        printf("xcc:se:cu\n");
-        for (int i = 0; i != cu_to_index_map.size(); ++i)
-        {
-            if (cu_to_index_map[i] != 0xffff)
-            {
-                print_cu_index(i);
-                printf(" index = %u\n", cu_to_index_map[i]);
-            }
-        }
     }
 
 
@@ -84,7 +60,6 @@ namespace
             id[cu_id] = cu_id;
         }
     }
-
 
     std::vector<uint16_t> determine_index_to_cu_map()
     {
@@ -108,8 +83,7 @@ namespace
         return cu_ids_h;
     }
 
-
-    std::vector<uint16_t> invert_index_to_cu_map(const std::vector<uint16_t>& index_to_cu_map)
+    std::vector<uint16_t> invert_map(const std::vector<uint16_t> &index_to_cu_map)
     {
         std::vector<uint16_t> cu_to_index_map(max_cu_per_device, all_ones);
         for (int i = 0; i != index_to_cu_map.size(); ++i)
@@ -120,25 +94,47 @@ namespace
         return cu_to_index_map;
     }
 
+    void *allocate_buffer(size_t no_sub_buffers, size_t packets_per_sub_buffer)
+    {
+        void *buffer;
+        std::size_t size = no_sub_buffers * packets_per_sub_buffer * dh_comms::bytes_per_packet;
+        printf("Allocating %lu bytes for %lu sub-buffers\n", size, no_sub_buffers);
+        CHK_HIP_ERR(hipMalloc(&buffer, size));
+        return buffer;
+    }
+
 } // unnamed namespace
 
 namespace dh_comms
 {
 
     buffer::buffer(std::size_t packets_per_sub_buffer)
+        : no_sub_buffers_(get_cu_count()),
+          index_to_cu_map_(determine_index_to_cu_map()),
+          cu_to_index_map_(invert_map(index_to_cu_map_)),
+          buffer_(allocate_buffer(no_sub_buffers_, packets_per_sub_buffer))
     {
-        std::size_t cu_count = get_cu_count();
-        std::size_t size = cu_count * packets_per_sub_buffer * bytes_per_packet;
-        printf("Allocating %lu bytes for %lu CUs\n", size, cu_count);
-        CHK_HIP_ERR(hipMalloc(&buffer_, size));
-        auto index_to_cu_map = determine_index_to_cu_map();
-        auto cu_to_index_map = invert_index_to_cu_map(index_to_cu_map);
-        print_cu_to_index_map(cu_to_index_map);
+        // Body intentionally empty
     }
 
     buffer::~buffer()
     {
         CHK_HIP_ERR(hipFree(buffer_));
+    }
+
+    void buffer::print_cu_to_index_map() const
+    {
+        printf("xcc:se:cu\n");
+        for (int i = 0; i != cu_to_index_map_.size(); ++i)
+        {
+            // The index of non-exisiting/non-enabled CU is set to 0xffff.
+            // We don't print those.
+            if (cu_to_index_map_[i] != 0xffff)
+            {
+                print_cu_id(i);
+                printf(" index = %u\n", cu_to_index_map_[i]);
+            }
+        }
     }
 
 } // namespace dh_comms
