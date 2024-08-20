@@ -41,7 +41,6 @@ namespace
         printf("%02u:%02u:%02u", xcc, se, cu);
     }
 
-
     __global__ void report_cu_ids(uint16_t *id)
     {
         if (threadIdx.x == 0)
@@ -125,6 +124,7 @@ namespace dh_comms
     void buffer::print_cu_to_index_map() const
     {
         printf("xcc:se:cu\n");
+        int column = 0;
         for (int i = 0; i != cu_to_index_map_.size(); ++i)
         {
             // The index of non-exisiting/non-enabled CU is set to 0xffff.
@@ -132,7 +132,15 @@ namespace dh_comms
             if (cu_to_index_map_[i] != 0xffff)
             {
                 print_cu_id(i);
-                printf(" index = %u\n", cu_to_index_map_[i]);
+                printf(" index = %3u", cu_to_index_map_[i]);
+                if (++column % 4)
+                {
+                    printf("  |  ");
+                }
+                else
+                {
+                    printf("\n");
+                }
             }
         }
     }
