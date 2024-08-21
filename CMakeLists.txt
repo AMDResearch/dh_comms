@@ -7,6 +7,8 @@ set(DH_COMMS_SOURCES
 )
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_executable(test ${DH_COMMS_SOURCES})
+target_compile_options(test PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
+target_link_options(test PRIVATE -fgpu-rdc)
 
 # Handle submodules automagically
 find_package(Git QUIET)

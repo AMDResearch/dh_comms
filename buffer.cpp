@@ -46,17 +46,7 @@ namespace
     {
         if (threadIdx.x == 0)
         {
-            uint16_t xcc = 0;
-#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
-            uint32_t xcc_reg;
-            asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
-            xcc = (xcc_reg & 0xf) << 7;
-#endif
-            uint32_t cu_se_reg;
-            asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
-            uint16_t se = ((cu_se_reg >> 13) & 0x7) << 4;
-            uint16_t cu = (cu_se_reg >> 8) & 0xf;
-            uint16_t cu_id = xcc | se | cu;
+            uint16_t cu_id = dh_comms::get_cu_id();
             id[cu_id] = cu_id;
         }
     }
@@ -83,17 +73,16 @@ namespace
         return cu_ids_h;
     }
 
-    std::vector<uint16_t> invert_map(const std::vector<uint16_t> &index_to_cu_map)
+    std::vector<size_t> invert_map(const std::vector<uint16_t> &index_to_cu_map)
     {
-        std::vector<uint16_t> cu_to_index_map(max_cu_per_device, all_ones);
-        for (int i = 0; i != index_to_cu_map.size(); ++i)
+        std::vector<size_t> cu_to_index_map(max_cu_per_device, all_ones);
+        for (size_t i = 0; i != index_to_cu_map.size(); ++i)
         {
             cu_to_index_map[index_to_cu_map[i]] = i;
         }
 
         return cu_to_index_map;
     }
-
 
     void *allocate_shared_buffer(size_t size)
     {
@@ -102,7 +91,7 @@ namespace
         if constexpr (shared_buffers_are_host_pinned)
         {
             CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
-            std::copy(zeros.cbegin(), zeros.cend(), (char*) buffer);
+            std::copy(zeros.cbegin(), zeros.cend(), (char *)buffer);
         }
         else
         {
@@ -112,9 +101,10 @@ namespace
         return buffer;
     }
 
-    template<typename T>
-    T* clone_to_device(const std::vector<T>& host_vec){
-        T* buffer;
+    template <typename T>
+    T *clone_to_device(const std::vector<T> &host_vec)
+    {
+        T *buffer;
         size_t size = host_vec.size() * sizeof(T);
         CHK_HIP_ERR(hipMalloc(&buffer, size));
         CHK_HIP_ERR(hipMemcpy(buffer, host_vec.data(), size, hipMemcpyHostToDevice));
@@ -125,6 +115,42 @@ namespace
 
 namespace dh_comms
 {
+    __constant__ size_t no_sub_buffers_c;
+    __constant__ size_t packets_per_sub_buffer_c;
+    __constant__ void *packet_buffer_c;
+    __constant__ size_t *cu_to_index_map_c;
+    __constant__ uint8_t *atomic_flags_c;
+
+    __device__ void test_constants_f()
+    {
+        if (threadIdx.x == 0)
+        {
+            printf("from test_constants device function:\n"
+                   "no_sub_buffers_c = %lu\n"
+                   "packets_per_sub_buffer_c = %lu\n",
+                   no_sub_buffers_c, packets_per_sub_buffer_c);
+        }
+    }
+
+    __device__ uint16_t get_cu_id()
+    {
+        uint16_t xcc = 0;
+#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
+        uint32_t xcc_reg;
+        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
+        xcc = (xcc_reg & 0xf) << 7;
+#endif
+        uint32_t cu_se_reg;
+        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
+        uint16_t se = ((cu_se_reg >> 13) & 0x7) << 4;
+        uint16_t cu = (cu_se_reg >> 8) & 0xf;
+        return xcc | se | cu;
+    }
+
+    __device__ size_t cu_to_index_map_f(uint16_t cu_id)
+    {
+        return cu_to_index_map_c[cu_id];
+    }
 
     buffer::buffer(std::size_t packets_per_sub_buffer)
         : no_sub_buffers_(get_cu_count()),
@@ -132,8 +158,8 @@ namespace dh_comms
           index_to_cu_map_(determine_index_to_cu_map()),
           cu_to_index_map_(invert_map(index_to_cu_map_)),
           packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
-          cu_to_index_map_d_(clone_to_device(index_to_cu_map_)),
-          atomic_flags_((decltype(atomic_flags_)) allocate_shared_buffer(no_sub_buffers_* sizeof(decltype(*atomic_flags_))))
+          cu_to_index_map_d_(clone_to_device(cu_to_index_map_)),
+          atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
     {
         if constexpr (shared_buffers_are_host_pinned)
         {
@@ -145,6 +171,20 @@ namespace dh_comms
             printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                    __FILE__, __LINE__);
         }
+        printf("from buffer ctor:\n");
+        printf("no_sub_buffers_ = %lu\n", no_sub_buffers_);
+        printf("packets_per_sub_buffer_ = %lu\n", packets_per_sub_buffer_);
+
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(no_sub_buffers_c),
+                                      &no_sub_buffers_, sizeof(no_sub_buffers_)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(packets_per_sub_buffer_c),
+                                      &packets_per_sub_buffer_, sizeof(packets_per_sub_buffer_)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(packet_buffer_c),
+                                      &packet_buffer_, sizeof(void *)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(cu_to_index_map_c),
+                                      &cu_to_index_map_d_, sizeof(void *)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(atomic_flags_c),
+                                      &atomic_flags_, sizeof(void *)));
     }
 
     buffer::~buffer()
@@ -158,14 +198,14 @@ namespace dh_comms
     {
         printf("xcc:se:cu\n");
         int column = 0;
-        for (int i = 0; i != cu_to_index_map_.size(); ++i)
+        for (size_t i = 0; i != cu_to_index_map_.size(); ++i)
         {
             // The index of non-exisiting/non-enabled CU is set to 0xffff.
             // We don't print those.
             if (cu_to_index_map_[i] != 0xffff)
             {
                 print_cu_id(i);
-                printf(" index = %3u", cu_to_index_map_[i]);
+                printf(" index = %3lu", cu_to_index_map_[i]);
                 if (++column % 4)
                 {
                     printf("  |  ");
