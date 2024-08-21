@@ -31,15 +31,17 @@ namespace
     /***
      * A CU id is an 11-bit value comprised of 4 bits for the XCC,
      * 3 bits for the SE on the XCC, and 4 bits for the CU on the SE.
-     * This function takes the cu id, and prints the XCC, SE and CU
-     * values, separated by colons.
+     * This function takes the cu id, and returns a string with the XCC,
+     * SE and CU values, separated by colons.
      */
-    void print_cu_id(uint16_t cu_id)
+    std::string cu_id_str(uint16_t cu_id)
     {
+        char buffer[9] = {0};
         uint16_t xcc = (cu_id & 0x780) >> 7;
         uint16_t se = (cu_id & 0x70) >> 4;
         uint16_t cu = (cu_id & 0xf);
-        printf("%02u:%02u:%02u", xcc, se, cu);
+        sprintf(buffer, "%02u:%02u:%02u", xcc, se, cu);
+        return std::string(buffer);
     }
 
     __global__ void report_cu_ids(uint16_t *id)
@@ -193,6 +195,7 @@ namespace dh_comms
 
     buffer::~buffer()
     {
+        CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
         CHK_HIP_ERR(hipFree(atomic_flags_));
         CHK_HIP_ERR(hipFree(cu_to_index_map_d_));
         CHK_HIP_ERR(hipFree(packet_buffer_));
@@ -208,8 +211,7 @@ namespace dh_comms
             // We don't print those.
             if (cu_to_index_map_[i] != 0xffff)
             {
-                print_cu_id(i);
-                printf(" index = %3lu", cu_to_index_map_[i]);
+                printf("%s index = %3lu", cu_id_str(i).c_str(), cu_to_index_map_[i]);
                 if (++column % 4)
                 {
                     printf("  |  ");
