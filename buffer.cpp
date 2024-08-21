@@ -4,7 +4,7 @@
 #include <algorithm>
 
 #include <hip/hip_runtime.h>
-#include "hip_utils/hip_utils.h"
+#include "hip_utils.h"
 
 #include "buffer.h"
 #include "packet.h"
