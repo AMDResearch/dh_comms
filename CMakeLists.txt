@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 project(dh_comms LANGUAGES HIP CXX)
 find_package(hip REQUIRED)
 set(DH_COMMS_SOURCES
+    packet.cpp
     buffer.cpp
     test.cpp
 )

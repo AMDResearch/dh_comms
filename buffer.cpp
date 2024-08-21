@@ -124,37 +124,6 @@ namespace dh_comms
     __constant__ size_t *cu_to_index_map_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    __device__ void test_constants_f()
-    {
-        if (threadIdx.x == 0)
-        {
-            printf("from test_constants device function:\n"
-                   "no_sub_buffers_c = %lu\n"
-                   "packets_per_sub_buffer_c = %lu\n",
-                   no_sub_buffers_c, packets_per_sub_buffer_c);
-        }
-    }
-
-    __device__ uint16_t get_cu_id()
-    {
-        uint16_t xcc = 0;
-#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
-        uint32_t xcc_reg;
-        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
-        xcc = (xcc_reg & 0xf) << 7;
-#endif
-        uint32_t cu_se_reg;
-        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
-        uint16_t se = ((cu_se_reg >> 13) & 0x7) << 4;
-        uint16_t cu = (cu_se_reg >> 8) & 0xf;
-        return xcc | se | cu;
-    }
-
-    __device__ size_t cu_to_index_map_f(uint16_t cu_id)
-    {
-        return cu_to_index_map_c[cu_id];
-    }
-
     buffer::buffer(std::size_t packets_per_sub_buffer)
         : no_sub_buffers_(get_cu_count()),
           packets_per_sub_buffer_(packets_per_sub_buffer),
@@ -224,4 +193,90 @@ namespace dh_comms
         }
     }
 
+    void buffer::show_queues() const
+    {
+        for (size_t i = 0; i != no_sub_buffers_; ++i)
+        {
+            size_t size = sub_buffer_sizes_[i];
+            if(size != 0){
+                printf("[Host] sub_buffer %lu for CU %s: size = %lu\n", i, cu_id_str(index_to_cu_map_[i]).c_str(), size);
+                packet* packets = (packet*)packet_buffer_;
+                packets = &packets[i * packets_per_sub_buffer_];
+                for(size_t i = 0; i != size; ++i){
+                    printf("[Host]  %s\n", packet_str(packets[i]).c_str());
+                }
+            }
+        }
+    }
+
 } // namespace dh_comms
+
+// device functions
+namespace dh_comms
+{
+    __device__ uint16_t get_cu_id()
+    {
+        uint16_t xcc = 0;
+#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
+        uint32_t xcc_reg;
+        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
+        xcc = (xcc_reg & 0xf) << 7;
+#endif
+        uint32_t cu_se_reg;
+        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
+        uint16_t se = ((cu_se_reg >> 13) & 0x7) << 4;
+        uint16_t cu = (cu_se_reg >> 8) & 0xf;
+        return xcc | se | cu;
+    }
+
+    __device__ size_t cu_to_index_map_f(uint16_t cu_id)
+    {
+        return cu_to_index_map_c[cu_id];
+    }
+
+    __device__ void wave_acquire(size_t sub_buf_idx)
+    {
+        // TODO: below test may not match first thread of wave, depending on block dimensions
+        // TODO: we probably need to store the exec mask, set it to 1, and restore afterwards
+        if (threadIdx.x % 64 == 0)
+        {
+            uint8_t expected = 0;
+            uint8_t desired = 1;
+            bool weak = false;
+            // printf("aqcuiring flag for idx %lu: start\n", sub_buf_idx);
+            while (not __atomic_compare_exchange(&atomic_flags_c[sub_buf_idx], &expected, &desired, weak,
+                                                 __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
+            {
+                // printf("aqcuiring flag for idx %lu: spinning\n", sub_buf_idx);
+                expected = 0;
+            }
+            // printf("aqcuiring flag for idx %lu: success\n", sub_buf_idx);
+        }
+    }
+
+    __device__ void wave_release(size_t sub_buf_idx)
+    {
+        // TODO: below test may not match first thread of wave, depending on block dimensions
+        // TODO: we probably need to store the exec mask, set it to 1, and restore afterwards
+        if (threadIdx.x % 64 == 0)
+        {
+            uint8_t zero = 0;
+            // printf("releasing flag for idx %lu: start\n", sub_buf_idx);
+            __atomic_store(&atomic_flags_c[sub_buf_idx], &zero, __ATOMIC_RELEASE);
+            // printf("releasing flag for idx %lu: done\n", sub_buf_idx);
+        }
+    }
+
+    __device__ void submit_packet(const packet &p)
+    {
+        uint16_t cu_id = get_cu_id();
+        size_t sub_buf_idx = cu_to_index_map_f(cu_id);
+        wave_acquire(sub_buf_idx);
+        packet *packet_buffer = (packet *)packet_buffer_c;
+        packet_buffer = &packet_buffer[sub_buf_idx * packets_per_sub_buffer_c + sub_buffer_sizes_c[sub_buf_idx] + threadIdx.x];
+        *packet_buffer = p;
+        // TODO: size increment needs to be done on a per-wave basis with a scalar instruction
+        atomicAdd(&sub_buffer_sizes_c[sub_buf_idx], 1);
+        wave_release(sub_buf_idx);
+    }
+}

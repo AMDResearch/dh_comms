@@ -3,7 +3,7 @@
 #include <hip/hip_runtime.h>
 #include <cstdio>
 
-int checkHipError(const hipError_t err, const char* cmd)
+inline int checkHipError(const hipError_t err, const char* cmd)
 {
   if(err) {
     printf("HIP error in command '%s'\n", cmd); \

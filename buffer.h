@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <vector>
+#include "packet.h"
 
 namespace dh_comms
 {
@@ -13,6 +14,7 @@ namespace dh_comms
         buffer &operator=(const buffer &) = delete;
 
         void print_cu_to_index_map() const;
+        void show_queues() const;
 
     private:
         std::size_t no_sub_buffers_; // Current implementation: 1 sub-buffer per CU
@@ -39,5 +41,6 @@ namespace dh_comms
     __device__ uint16_t get_cu_id();
     __device__ size_t cu_to_index_map_f(uint16_t cu_id);
     __device__ void test_constants_f();
+    __device__ void submit_packet(const packet& p);
 
 } // namespace dh_comms
