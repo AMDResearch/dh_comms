@@ -29,6 +29,7 @@ namespace dh_comms
         void *packet_buffer_ = nullptr;
         // map that allows waves to determine which sub-buffer to write to, based on the XCC|SE|CU
         // on which they run.
+        size_t *sub_buffer_sizes_;
         size_t *cu_to_index_map_d_;
         // flags used for synchronizing data access between multiple device threads, and between
         // device/host code

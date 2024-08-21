@@ -118,6 +118,7 @@ namespace dh_comms
     __constant__ size_t no_sub_buffers_c;
     __constant__ size_t packets_per_sub_buffer_c;
     __constant__ void *packet_buffer_c;
+    __constant__ size_t *sub_buffer_sizes_c;
     __constant__ size_t *cu_to_index_map_c;
     __constant__ uint8_t *atomic_flags_c;
 
@@ -158,6 +159,7 @@ namespace dh_comms
           index_to_cu_map_(determine_index_to_cu_map()),
           cu_to_index_map_(invert_map(index_to_cu_map_)),
           packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
+          sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
           cu_to_index_map_d_(clone_to_device(cu_to_index_map_)),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
     {
@@ -181,6 +183,8 @@ namespace dh_comms
                                       &packets_per_sub_buffer_, sizeof(packets_per_sub_buffer_)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(packet_buffer_c),
                                       &packet_buffer_, sizeof(void *)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_sizes_c),
+                                      &sub_buffer_sizes_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(cu_to_index_map_c),
                                       &cu_to_index_map_d_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(atomic_flags_c),
