@@ -11,80 +11,7 @@
 
 namespace
 {
-    constexpr size_t max_xcc = 16;       // 4 bits
-    constexpr size_t max_se_per_xcc = 8; // 3 bits
-    constexpr size_t max_cu_per_se = 16; // 4 bits
-    constexpr size_t max_cu_per_device = max_xcc * max_se_per_xcc * max_cu_per_se;
-    constexpr uint16_t all_ones = 0xffff;
     constexpr bool shared_buffers_are_host_pinned = true;
-
-    /***
-     * Returns the number of compute units of the active HIP device
-     */
-    size_t get_cu_count()
-    {
-        hipDeviceProp_t props;
-        CHK_HIP_ERR(hipGetDeviceProperties(&props, 0)); // TODO: handle multiple devices
-        return props.multiProcessorCount;
-    }
-
-    /***
-     * A CU id is an 11-bit value comprised of 4 bits for the XCC,
-     * 3 bits for the SE on the XCC, and 4 bits for the CU on the SE.
-     * This function takes the cu id, and returns a string with the XCC,
-     * SE and CU values, separated by colons.
-     */
-    std::string cu_id_str(uint16_t cu_id)
-    {
-        char buffer[9] = {0};
-        uint16_t xcc = (cu_id & 0x780) >> 7;
-        uint16_t se = (cu_id & 0x70) >> 4;
-        uint16_t cu = (cu_id & 0xf);
-        sprintf(buffer, "%02u:%02u:%02u", xcc, se, cu);
-        return std::string(buffer);
-    }
-
-    __global__ void report_cu_ids(uint16_t *id)
-    {
-        if (threadIdx.x == 0)
-        {
-            uint16_t cu_id = dh_comms::get_cu_id();
-            id[cu_id] = cu_id;
-        }
-    }
-
-    std::vector<uint16_t> determine_index_to_cu_map()
-    {
-        std::vector<uint16_t> cu_ids_h(max_cu_per_device, all_ones);
-        uint16_t *cu_ids_d;
-
-        CHK_HIP_ERR(hipMalloc(&cu_ids_d, max_cu_per_device * sizeof(uint16_t)));
-        CHK_HIP_ERR(hipMemcpy(cu_ids_d, cu_ids_h.data(), max_cu_per_device * sizeof(uint16_t), hipMemcpyHostToDevice));
-        report_cu_ids<<<10 * max_cu_per_device, 256>>>(cu_ids_d);
-        CHK_HIP_ERR(hipMemcpy(cu_ids_h.data(), cu_ids_d, max_cu_per_device * sizeof(uint16_t), hipMemcpyDeviceToHost));
-        CHK_HIP_ERR(hipFree(cu_ids_d));
-
-        std::sort(cu_ids_h.begin(), cu_ids_h.end());
-        auto last = std::unique(cu_ids_h.begin(), cu_ids_h.end());
-        auto count = last - cu_ids_h.begin();
-        if (count != 0 and cu_ids_h[count - 1] == all_ones)
-        {
-            --count;
-        }
-        cu_ids_h.resize(count);
-        return cu_ids_h;
-    }
-
-    std::vector<size_t> invert_map(const std::vector<uint16_t> &index_to_cu_map)
-    {
-        std::vector<size_t> cu_to_index_map(max_cu_per_device, all_ones);
-        for (size_t i = 0; i != index_to_cu_map.size(); ++i)
-        {
-            cu_to_index_map[index_to_cu_map[i]] = i;
-        }
-
-        return cu_to_index_map;
-    }
 
     void *allocate_shared_buffer(size_t size)
     {
@@ -121,17 +48,13 @@ namespace dh_comms
     __constant__ size_t packets_per_sub_buffer_c;
     __constant__ void *packet_buffer_c;
     __constant__ size_t *sub_buffer_sizes_c;
-    __constant__ size_t *cu_to_index_map_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    buffer::buffer(std::size_t packets_per_sub_buffer)
-        : no_sub_buffers_(get_cu_count()),
+    buffer::buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer)
+        : no_sub_buffers_(no_sub_buffers),
           packets_per_sub_buffer_(packets_per_sub_buffer),
-          index_to_cu_map_(determine_index_to_cu_map()),
-          cu_to_index_map_(invert_map(index_to_cu_map_)),
           packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
-          cu_to_index_map_d_(clone_to_device(cu_to_index_map_)),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_)))),
           teardown_(false),
           buffer_processor_(std::thread(&buffer::process_buffer, this))
@@ -158,8 +81,6 @@ namespace dh_comms
                                       &packet_buffer_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_sizes_c),
                                       &sub_buffer_sizes_, sizeof(void *)));
-        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(cu_to_index_map_c),
-                                      &cu_to_index_map_d_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(atomic_flags_c),
                                       &atomic_flags_, sizeof(void *)));
     }
@@ -172,31 +93,7 @@ namespace dh_comms
 
         CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
         CHK_HIP_ERR(hipFree(atomic_flags_));
-        CHK_HIP_ERR(hipFree(cu_to_index_map_d_));
         CHK_HIP_ERR(hipFree(packet_buffer_));
-    }
-
-    void buffer::print_cu_to_index_map() const
-    {
-        printf("xcc:se:cu\n");
-        int column = 0;
-        for (size_t i = 0; i != cu_to_index_map_.size(); ++i)
-        {
-            // The index of non-exisiting/non-enabled CU is set to 0xffff.
-            // We don't print those.
-            if (cu_to_index_map_[i] != 0xffff)
-            {
-                printf("%s index = %3lu", cu_id_str(i).c_str(), cu_to_index_map_[i]);
-                if (++column % 4)
-                {
-                    printf("  |  ");
-                }
-                else
-                {
-                    printf("\n");
-                }
-            }
-        }
     }
 
     void buffer::show_queues() const
@@ -206,7 +103,7 @@ namespace dh_comms
             size_t size = sub_buffer_sizes_[i];
             if (size != 0)
             {
-                printf("[Host] sub_buffer %lu for CU %s: size = %lu\n", i, cu_id_str(index_to_cu_map_[i]).c_str(), size);
+                printf("[Host] sub_buffer %lu: size = %lu\n", i, size);
                 packet *packets = (packet *)packet_buffer_;
                 packets = &packets[i * packets_per_sub_buffer_];
                 for (size_t i = 0; i != size; ++i)
@@ -290,10 +187,21 @@ namespace dh_comms
         return xcc | se | cu;
     }
 
-    __device__ size_t cu_to_index_map_f(uint16_t cu_id)
+    __device__ size_t get_sub_buffer_idx()
     {
-        return cu_to_index_map_c[cu_id];
+        size_t grid_dim_x_m = gridDim.x % no_sub_buffers_c;
+        size_t grid_dim_y_m = gridDim.y % no_sub_buffers_c;
+        size_t grid_dim_xy_m = (grid_dim_x_m * grid_dim_y_m) % no_sub_buffers_c;
+        size_t block_id_z_grid_dim_xy_m = (blockIdx.z * grid_dim_xy_m) % no_sub_buffers_c;
+
+        size_t block_id_y_grid_dim_x_m = (blockIdx.y * grid_dim_x_m) % no_sub_buffers_c;
+
+        size_t block_id_x_m = blockIdx.x % no_sub_buffers_c;
+
+        return (block_id_z_grid_dim_xy_m + block_id_y_grid_dim_x_m + block_id_x_m) % no_sub_buffers_c;
+
     }
+
 
     __device__ void wave_acquire(size_t sub_buf_idx)
     {
@@ -343,14 +251,13 @@ namespace dh_comms
     __device__ void submit_packet(const packet &p)
     {
         bool can_write = false;
-        uint16_t cu_id = get_cu_id();
-        size_t sub_buf_idx = cu_to_index_map_f(cu_id);
+        size_t sub_buf_idx = get_sub_buffer_idx();
         while (not can_write)
         {
             wave_acquire(sub_buf_idx);
-            if (sub_buffer_sizes_c[sub_buf_idx] + blockDim.x > packets_per_sub_buffer_c)
+            if (sub_buffer_sizes_c[sub_buf_idx] + 64 > packets_per_sub_buffer_c)
             {
-                // insufficient space for all threads in the block to write ->
+                // insufficient space for all threads in the wave to write ->
                 // signal to the host that the buffer is full so that it can process and
                 // purge the buffer
                 wave_signal_host(sub_buf_idx);

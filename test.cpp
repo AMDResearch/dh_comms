@@ -24,15 +24,16 @@ __global__ void test()
 
 int main()
 {
+    constexpr size_t no_sub_buffers = 256;
     constexpr size_t packets_per_sub_buffer = 1024;
-    constexpr int no_blocks = 1024 * 104 * 16 + 3;
+    constexpr int no_blocks = 1024 * 128 * 16 + 3;
     constexpr size_t data_size = no_blocks * 64 * sizeof(dh_comms::packet);
 
     hipEvent_t start, stop;
     CHK_HIP_ERR(hipEventCreate(&start));
     CHK_HIP_ERR(hipEventCreate(&stop));
     {
-        dh_comms::buffer buffer(packets_per_sub_buffer);
+        dh_comms::buffer buffer(no_sub_buffers, packets_per_sub_buffer);
         CHK_HIP_ERR(hipDeviceSynchronize());
         CHK_HIP_ERR(hipEventRecord(start));
         test<<<no_blocks, 64>>>();
