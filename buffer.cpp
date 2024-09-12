@@ -50,14 +50,14 @@ namespace dh_comms
     __constant__ size_t *sub_buffer_sizes_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    buffer::buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer)
+    buffer::buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer, std::size_t no_host_threads)
         : no_sub_buffers_(no_sub_buffers),
           packets_per_sub_buffer_(packets_per_sub_buffer),
           packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_)))),
           teardown_(false),
-          buffer_processor_(std::thread(&buffer::process_buffer, this))
+          sub_buffer_processors_(init_host_threads(no_host_threads))
     {
         if constexpr (shared_buffers_are_host_pinned)
         {
@@ -89,11 +89,38 @@ namespace dh_comms
     {
         CHK_HIP_ERR(hipDeviceSynchronize());
         teardown_ = true;
-        buffer_processor_.join();
+        for (auto &sbp : sub_buffer_processors_)
+        {
+            sbp.join();
+        }
 
         CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
         CHK_HIP_ERR(hipFree(atomic_flags_));
         CHK_HIP_ERR(hipFree(packet_buffer_));
+    }
+
+    std::vector<std::thread> buffer::init_host_threads(std::size_t no_host_threads)
+    {
+        assert(no_host_threads != 0);
+        std::size_t no_sub_buffers_per_thread = no_sub_buffers_ / no_host_threads;
+        std::size_t remainder = no_sub_buffers_ % no_host_threads;
+
+        std::vector<std::thread> sub_buffer_processors;
+        std::size_t first = 0;
+        std::size_t last;
+        for (std::size_t i = 0; i != no_host_threads; ++i)
+        {
+            last = first + no_sub_buffers_per_thread;
+            if (i < remainder)
+            {
+                ++last;
+            }
+            sub_buffer_processors.emplace_back(std::thread(&buffer::process_sub_buffers, this, first, last));
+            first = last;
+        }
+        assert(last == no_sub_buffers_);
+
+        return sub_buffer_processors;
     }
 
     void buffer::show_queues() const
@@ -114,13 +141,13 @@ namespace dh_comms
         }
     }
 
-    void buffer::process_buffer()
+    void buffer::process_sub_buffers(std::size_t first, std::size_t last)
     {
         std::size_t no_packets = 0;
         std::size_t sum = 0;
         while (not teardown_)
         {
-            for (size_t i = 0; i != no_sub_buffers_; ++i)
+            for (size_t i = first; i != last; ++i)
             {
                 // uint8_t expected = 2;
                 // uint8_t desired = 3;
@@ -137,7 +164,7 @@ namespace dh_comms
                     {
                         sum += packets[p].wg_x;
                     }
-                    // printf("[Host] process_buffer: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
+                    // printf("[Host] process_sub_buffers: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
                     // After processing: set size to zero, and reset flag
                     sub_buffer_sizes_[i] = 0;
                     __atomic_store_n(&atomic_flags_[i], 0, __ATOMIC_RELEASE);
@@ -145,9 +172,9 @@ namespace dh_comms
             }
         }
 
-        // printf("[Host] process_buffer: processing partially full sub-buffers after kernels have finished\n");
+        // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
 
-        for (size_t i = 0; i != no_sub_buffers_; ++i)
+        for (size_t i = first; i != last; ++i)
         {
             uint8_t flag = __atomic_load_n(&atomic_flags_[i], __ATOMIC_ACQUIRE);
             if (flag != 0) // Should not happen, indicates a missing atomic release from device code
@@ -162,7 +189,7 @@ namespace dh_comms
             {
                 sum += packets[p].wg_x;
             }
-            // printf("[Host] process_buffer: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
+            // printf("[Host] process_sub_buffers: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
         }
         printf("[Host] processed %lu packets, sum of wg_x = %lu\n", no_packets, sum);
     }
@@ -199,9 +226,7 @@ namespace dh_comms
         size_t block_id_x_m = blockIdx.x % no_sub_buffers_c;
 
         return (block_id_z_grid_dim_xy_m + block_id_y_grid_dim_x_m + block_id_x_m) % no_sub_buffers_c;
-
     }
-
 
     __device__ void wave_acquire(size_t sub_buf_idx)
     {

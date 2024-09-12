@@ -10,7 +10,7 @@ namespace dh_comms
     class buffer
     {
     public:
-        buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer);
+        buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer, std::size_t no_host_threads = 1);
         ~buffer();
         buffer(const buffer &) = delete;
         buffer &operator=(const buffer &) = delete;
@@ -18,7 +18,8 @@ namespace dh_comms
         void show_queues() const;
 
     private:
-        void process_buffer();
+        void process_sub_buffers(std::size_t first, std::size_t last);
+        std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:
         std::size_t no_sub_buffers_; // Current implementation: 1 sub-buffer per CU
@@ -36,7 +37,7 @@ namespace dh_comms
         // device/host code
         uint8_t *atomic_flags_;
         volatile bool teardown_;
-        std::thread buffer_processor_;
+        std::vector<std::thread> sub_buffer_processors_;
     };
 
     __device__ uint16_t get_cu_id();
