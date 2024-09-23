@@ -26,7 +26,7 @@ int main()
 {
     constexpr size_t no_sub_buffers = 256;
     constexpr size_t packets_per_sub_buffer = 1024;
-    constexpr size_t no_host_threads = 16;
+    constexpr size_t no_host_threads = 1;
     constexpr int no_blocks = 1024 * 128 * 16 + 3;
     constexpr size_t data_size = no_blocks * 64 * sizeof(dh_comms::packet);
 
