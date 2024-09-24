@@ -7,7 +7,7 @@
 #include "hip_utils.h"
 
 #include "buffer.h"
-#include "packet.h"
+#include "data_headers.h"
 
 namespace
 {
@@ -45,15 +45,15 @@ namespace
 namespace dh_comms
 {
     __constant__ size_t no_sub_buffers_c;
-    __constant__ size_t packets_per_sub_buffer_c;
-    __constant__ void *packet_buffer_c;
+    __constant__ size_t sub_buffer_capacity_c;
+    __constant__ char *buffer_c;
     __constant__ size_t *sub_buffer_sizes_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    buffer::buffer(std::size_t no_sub_buffers, std::size_t packets_per_sub_buffer, std::size_t no_host_threads)
+    buffer::buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, std::size_t no_host_threads)
         : no_sub_buffers_(no_sub_buffers),
-          packets_per_sub_buffer_(packets_per_sub_buffer),
-          packet_buffer_(allocate_shared_buffer(no_sub_buffers_ * packets_per_sub_buffer_ * bytes_per_packet)),
+          sub_buffer_capacity_(sub_buffer_capacity),
+          buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_)))),
           teardown_(false),
@@ -71,14 +71,14 @@ namespace dh_comms
         }
         printf("from buffer ctor:\n");
         printf("no_sub_buffers_ = %lu\n", no_sub_buffers_);
-        printf("packets_per_sub_buffer_ = %lu\n", packets_per_sub_buffer_);
+        printf("sub_buffer_capacity_ = %lu\n", sub_buffer_capacity_);
 
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(no_sub_buffers_c),
                                       &no_sub_buffers_, sizeof(no_sub_buffers_)));
-        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(packets_per_sub_buffer_c),
-                                      &packets_per_sub_buffer_, sizeof(packets_per_sub_buffer_)));
-        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(packet_buffer_c),
-                                      &packet_buffer_, sizeof(void *)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_capacity_c),
+                                      &sub_buffer_capacity_, sizeof(sub_buffer_capacity_)));
+        CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(buffer_c),
+                                      &buffer_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_sizes_c),
                                       &sub_buffer_sizes_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(atomic_flags_c),
@@ -96,7 +96,7 @@ namespace dh_comms
 
         CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
         CHK_HIP_ERR(hipFree(atomic_flags_));
-        CHK_HIP_ERR(hipFree(packet_buffer_));
+        CHK_HIP_ERR(hipFree(buffer_));
     }
 
     std::vector<std::thread> buffer::init_host_threads(std::size_t no_host_threads)
@@ -123,56 +123,52 @@ namespace dh_comms
         return sub_buffer_processors;
     }
 
-    void buffer::show_queues() const
-    {
-        for (size_t i = 0; i != no_sub_buffers_; ++i)
-        {
-            size_t size = sub_buffer_sizes_[i];
-            if (size != 0)
-            {
-                printf("[Host] sub_buffer %lu: size = %lu\n", i, size);
-                packet *packets = (packet *)packet_buffer_;
-                packets = &packets[i * packets_per_sub_buffer_];
-                for (size_t i = 0; i != size; ++i)
-                {
-                    printf("[Host]  %s\n", packet_str(packets[i]).c_str());
-                }
-            }
-        }
-    }
-
     void buffer::process_sub_buffers(std::size_t first, std::size_t last)
     {
-        std::size_t no_packets = 0;
-        std::size_t sum = 0;
         while (not teardown_)
         {
             for (size_t i = first; i != last; ++i)
             {
-                // uint8_t expected = 2;
-                // uint8_t desired = 3;
-                // bool weak = false;
-                // if(__atomic_compare_exchange(&atomic_flags_[i], &expected, &desired, weak, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
                 uint8_t flag = __atomic_load_n(&atomic_flags_[i], __ATOMIC_ACQUIRE);
-                if (flag == 2) // buffer is full: process and reset
+                if (flag > 1) // buffer is full: process and reset
                 {
                     // TODO: process data
-                    no_packets += sub_buffer_sizes_[i];
-                    packet *packets = (packet *)packet_buffer_;
-                    packets = &packets[i * packets_per_sub_buffer_];
-                    for (size_t p = 0; p != sub_buffer_sizes_[i]; ++p)
+                    size_t size = sub_buffer_sizes_[i];
+                    size_t byte_offset = i * sub_buffer_capacity_;
+                    char *message_p = &buffer_[byte_offset];
+                    while (size != 0)
                     {
-                        sum += packets[p].wg_x;
+                        printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, i);
+                        wave_header_t *wave_header_p = (wave_header_t *)message_p;
+                        size_t data_size = wave_header_p->data_size;
+                        printf("wave_header:\n");
+                        printf("\texec = 0x%016lx\n", wave_header_p->exec);
+                        uint32_t active_lane_count = wave_header_p->active_lane_count;
+                        printf("\tactive_lane_count = %u\n", active_lane_count);
+                        printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
+                               wave_header_p->block_idx_z, wave_header_p->wave_id);
+                        printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
+                               wave_header_p->cu_id);
+                        message_p += sizeof(wave_header_t);
+                        lane_header_t *lane_header_p = (lane_header_t *)message_p;
+                        for (uint32_t lane = 0; lane != active_lane_count; ++lane)
+                        {
+                            printf("\t[thread] = [%u,%u,%u]\n", lane_header_p->thread_idx_x,
+                                   lane_header_p->thread_idx_y, lane_header_p->thread_idx_z);
+                            ++lane_header_p;
+                        }
+                        message_p += data_size;
+                        size -= (sizeof(wave_header_t) + data_size);
+                        printf("\n");
                     }
-                    // printf("[Host] process_sub_buffers: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
-                    // After processing: set size to zero, and reset flag
+
                     sub_buffer_sizes_[i] = 0;
-                    __atomic_store_n(&atomic_flags_[i], 0, __ATOMIC_RELEASE);
+                    __atomic_store_n(&atomic_flags_[i], flag - 2, __ATOMIC_RELEASE);
                 }
             }
         }
 
-        // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
+        printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
 
         for (size_t i = first; i != last; ++i)
         {
@@ -182,16 +178,35 @@ namespace dh_comms
                 printf("Found non-zero flag for sub-buffer %lu\n", i);
             }
             // TODO: process data
-            no_packets += sub_buffer_sizes_[i];
-            packet *packets = (packet *)packet_buffer_;
-            packets = &packets[i * packets_per_sub_buffer_];
-            for (size_t p = 0; p != sub_buffer_sizes_[i]; ++p)
+            size_t size = sub_buffer_sizes_[i];
+            size_t byte_offset = i * sub_buffer_capacity_;
+            char *message_p = &buffer_[byte_offset];
+            while (size != 0)
             {
-                sum += packets[p].wg_x;
+                printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, i);
+                wave_header_t *wave_header_p = (wave_header_t *)message_p;
+                size_t data_size = wave_header_p->data_size;
+                printf("wave_header:\n");
+                printf("\texec = 0x%016lx\n", wave_header_p->exec);
+                uint32_t active_lane_count = wave_header_p->active_lane_count;
+                printf("\tactive_lane_count = %u\n", active_lane_count);
+                printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
+                       wave_header_p->block_idx_z, wave_header_p->wave_id);
+                printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
+                       wave_header_p->cu_id);
+                message_p += sizeof(wave_header_t);
+                lane_header_t *lane_header_p = (lane_header_t *)message_p;
+                for (uint32_t lane = 0; lane != active_lane_count; ++lane)
+                {
+                    printf("\t[thread] = [%u,%u,%u]\n", lane_header_p->thread_idx_x,
+                           lane_header_p->thread_idx_y, lane_header_p->thread_idx_z);
+                    ++lane_header_p;
+                }
+                message_p += data_size;
+                size -= (sizeof(wave_header_t) + data_size);
+                printf("\n");
             }
-            // printf("[Host] process_sub_buffers: sub-buffer %lu has size %lu\n", i, sub_buffer_sizes_[i]);
         }
-        printf("[Host] processed %lu packets, sum of wg_x = %lu\n", no_packets, sum);
     }
 
 } // namespace dh_comms
@@ -199,19 +214,29 @@ namespace dh_comms
 // device functions
 namespace dh_comms
 {
-    __device__ uint16_t get_cu_id()
+    __device__ size_t no_sub_buffers_f()
     {
-        uint16_t xcc = 0;
-#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
-        uint32_t xcc_reg;
-        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
-        xcc = (xcc_reg & 0xf) << 7;
-#endif
-        uint32_t cu_se_reg;
-        asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
-        uint16_t se = ((cu_se_reg >> 13) & 0x7) << 4;
-        uint16_t cu = (cu_se_reg >> 8) & 0xf;
-        return xcc | se | cu;
+        return no_sub_buffers_c;
+    }
+
+    __device__ size_t sub_buffer_capacity_f()
+    {
+        return sub_buffer_capacity_c;
+    }
+
+    __device__ char *buffer_f()
+    {
+        return buffer_c;
+    }
+
+    __device__ size_t *sub_buffer_sizes_f()
+    {
+        return sub_buffer_sizes_c;
+    }
+
+    __device__ uint8_t *atomic_flags_f()
+    {
+        return atomic_flags_c;
     }
 
     __device__ size_t get_sub_buffer_idx()
@@ -228,75 +253,47 @@ namespace dh_comms
         return (block_id_z_grid_dim_xy_m + block_id_y_grid_dim_x_m + block_id_x_m) % no_sub_buffers_c;
     }
 
-    __device__ void wave_acquire(size_t sub_buf_idx)
+    __device__ void wave_acquire(size_t sub_buf_idx, unsigned int active_lane_id)
     {
-        // TODO: below test may not match first thread of wave, depending on block dimensions
-        // TODO: we probably need to store the exec mask, set it to 1, and restore afterwards
-        if (threadIdx.x % 64 == 0)
+        if (active_lane_id == 0)
         {
             uint8_t expected = 0;
             uint8_t desired = 1;
             bool weak = false;
-            // printf("aqcuiring flag for idx %lu: start\n", sub_buf_idx);
             while (not __atomic_compare_exchange(&atomic_flags_c[sub_buf_idx], &expected, &desired, weak,
                                                  __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
             {
-                // printf("aqcuiring flag for idx %lu: spinning\n", sub_buf_idx);
+                // __atomic_compare_exchange returns the value at the address (first argument) in
+                // the second argument (expected), so we need to reset it in this spin-loop
                 expected = 0;
             }
-            // printf("aqcuiring flag for idx %lu: success\n", sub_buf_idx);
         }
     }
 
-    __device__ void wave_release(size_t sub_buf_idx)
+    __device__ void wave_release(size_t sub_buf_idx, unsigned int active_lane_id)
     {
-        // TODO: below test may not match first thread of wave, depending on block dimensions
-        // TODO: we probably need to store the exec mask, set it to 1, and restore afterwards
-        if (threadIdx.x % 64 == 0)
+        if (active_lane_id == 0)
         {
-            uint8_t zero = 0;
-            // printf("releasing flag for idx %lu: start\n", sub_buf_idx);
-            __atomic_store(&atomic_flags_c[sub_buf_idx], &zero, __ATOMIC_RELEASE);
-            // printf("releasing flag for idx %lu: done\n", sub_buf_idx);
+            uint8_t flag_value = 0;
+            __atomic_store(&atomic_flags_c[sub_buf_idx], &flag_value, __ATOMIC_RELEASE);
         }
     }
 
-    __device__ void wave_signal_host(size_t sub_buf_idx)
+    __device__ void wave_signal_host(size_t sub_buf_idx, unsigned int active_lane_id, bool return_control)
     {
-        // TODO: below test may not match first thread of wave, depending on block dimensions
-        // TODO: we probably need to store the exec mask, set it to 1, and restore afterwards
-        if (threadIdx.x % 64 == 0)
+        if (active_lane_id == 0)
         {
-            uint8_t two = 2;
+            uint8_t flag_value = return_control ? 3 : 2;
             // printf("[Device] signalling buffer full for idx %lu\n", sub_buf_idx);
-            __atomic_store(&atomic_flags_c[sub_buf_idx], &two, __ATOMIC_RELEASE);
+            __atomic_store(&atomic_flags_c[sub_buf_idx], &flag_value, __ATOMIC_RELEASE);
+            if (return_control)
+            {
+                // spin until host sets flag to 1, indicating it returns control to this wave
+                while (__atomic_load_n(&atomic_flags_c[sub_buf_idx], __ATOMIC_ACQUIRE) != 1)
+                {
+                }
+            }
         }
     }
 
-    __device__ void submit_packet(const packet &p)
-    {
-        bool can_write = false;
-        size_t sub_buf_idx = get_sub_buffer_idx();
-        while (not can_write)
-        {
-            wave_acquire(sub_buf_idx);
-            if (sub_buffer_sizes_c[sub_buf_idx] + 64 > packets_per_sub_buffer_c)
-            {
-                // insufficient space for all threads in the wave to write ->
-                // signal to the host that the buffer is full so that it can process and
-                // purge the buffer
-                wave_signal_host(sub_buf_idx);
-            }
-            else
-            {
-                can_write = true;
-            }
-        }
-        packet *packet_buffer = (packet *)packet_buffer_c;
-        packet_buffer = &packet_buffer[sub_buf_idx * packets_per_sub_buffer_c + sub_buffer_sizes_c[sub_buf_idx] + threadIdx.x];
-        *packet_buffer = p;
-        // TODO: size increment needs to be done on a per-wave basis with a scalar instruction
-        atomicAdd(&sub_buffer_sizes_c[sub_buf_idx], 1);
-        wave_release(sub_buf_idx);
-    }
 }
