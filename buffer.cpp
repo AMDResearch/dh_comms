@@ -50,9 +50,12 @@ namespace dh_comms
     __constant__ size_t *sub_buffer_sizes_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    buffer::buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, std::size_t no_host_threads)
+    buffer::buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
+                   std::function<std::size_t(char *&message_p, size_t size, size_t sub_buf_no)> message_processor,
+                   std::size_t no_host_threads)
         : no_sub_buffers_(no_sub_buffers),
           sub_buffer_capacity_(sub_buffer_capacity),
+          message_processor_(message_processor),
           buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_)))),
@@ -138,28 +141,7 @@ namespace dh_comms
                     char *message_p = &buffer_[byte_offset];
                     while (size != 0)
                     {
-                        printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, i);
-                        wave_header_t *wave_header_p = (wave_header_t *)message_p;
-                        size_t data_size = wave_header_p->data_size;
-                        printf("wave_header:\n");
-                        printf("\texec = 0x%016lx\n", wave_header_p->exec);
-                        uint32_t active_lane_count = wave_header_p->active_lane_count;
-                        printf("\tactive_lane_count = %u\n", active_lane_count);
-                        printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
-                               wave_header_p->block_idx_z, wave_header_p->wave_id);
-                        printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
-                               wave_header_p->cu_id);
-                        message_p += sizeof(wave_header_t);
-                        lane_header_t *lane_header_p = (lane_header_t *)message_p;
-                        for (uint32_t lane = 0; lane != active_lane_count; ++lane)
-                        {
-                            printf("\t[thread] = [%u,%u,%u]\n", lane_header_p->thread_idx_x,
-                                   lane_header_p->thread_idx_y, lane_header_p->thread_idx_z);
-                            ++lane_header_p;
-                        }
-                        message_p += data_size;
-                        size -= (sizeof(wave_header_t) + data_size);
-                        printf("\n");
+                        size = message_processor_(message_p, size, i);
                     }
 
                     sub_buffer_sizes_[i] = 0;
@@ -183,28 +165,7 @@ namespace dh_comms
             char *message_p = &buffer_[byte_offset];
             while (size != 0)
             {
-                printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, i);
-                wave_header_t *wave_header_p = (wave_header_t *)message_p;
-                size_t data_size = wave_header_p->data_size;
-                printf("wave_header:\n");
-                printf("\texec = 0x%016lx\n", wave_header_p->exec);
-                uint32_t active_lane_count = wave_header_p->active_lane_count;
-                printf("\tactive_lane_count = %u\n", active_lane_count);
-                printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
-                       wave_header_p->block_idx_z, wave_header_p->wave_id);
-                printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
-                       wave_header_p->cu_id);
-                message_p += sizeof(wave_header_t);
-                lane_header_t *lane_header_p = (lane_header_t *)message_p;
-                for (uint32_t lane = 0; lane != active_lane_count; ++lane)
-                {
-                    printf("\t[thread] = [%u,%u,%u]\n", lane_header_p->thread_idx_x,
-                           lane_header_p->thread_idx_y, lane_header_p->thread_idx_z);
-                    ++lane_header_p;
-                }
-                message_p += data_size;
-                size -= (sizeof(wave_header_t) + data_size);
-                printf("\n");
+                size = message_processor_(message_p, size, i);
             }
         }
     }
