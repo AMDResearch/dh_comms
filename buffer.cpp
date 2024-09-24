@@ -51,7 +51,7 @@ namespace dh_comms
     __constant__ uint8_t *atomic_flags_c;
 
     buffer::buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                   std::function<std::size_t(char *&message_p, size_t size, size_t sub_buf_no)> message_processor,
+                   message_processor_base& message_processor,
                    std::size_t no_host_threads)
         : no_sub_buffers_(no_sub_buffers),
           sub_buffer_capacity_(sub_buffer_capacity),
@@ -132,6 +132,10 @@ namespace dh_comms
         {
             for (size_t i = first; i != last; ++i)
             {
+                // when the sub-buffer for a wave on the device is full, it will
+                // set the flag to either 3 (if it wants control back after the host
+                // is done processing the sub-buffer) or 2 (if it doesn't want control back,
+                // and instead allows any wave to take control of the sub-buffer)
                 uint8_t flag = __atomic_load_n(&atomic_flags_[i], __ATOMIC_ACQUIRE);
                 if (flag > 1) // buffer is full: process and reset
                 {
@@ -145,12 +149,14 @@ namespace dh_comms
                     }
 
                     sub_buffer_sizes_[i] = 0;
+                    // setting the flag to either 1 (giving contol back to the signaling wave)
+                    // or 0 (allowing any wave to take control of the sub-buffer)
                     __atomic_store_n(&atomic_flags_[i], flag - 2, __ATOMIC_RELEASE);
                 }
             }
         }
 
-        printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
+        // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
 
         for (size_t i = first; i != last; ++i)
         {
@@ -247,6 +253,12 @@ namespace dh_comms
             uint8_t flag_value = return_control ? 3 : 2;
             // printf("[Device] signalling buffer full for idx %lu\n", sub_buf_idx);
             __atomic_store(&atomic_flags_c[sub_buf_idx], &flag_value, __ATOMIC_RELEASE);
+            // when host code sees a flag value > 1, it starts processing the sub-buffer that
+            // we indicated to be full. Once the host is done, it subtracts 2 from the flag,
+            // i.e., if return_control is true, the flag will be 1 after the host is done,
+            // and this wave will wait for that to take control. Otherwise, if return_control
+            // is false, the host will set the flag to 0, and any wave that wants to write
+            // to the sub-buffer can get control by calling wave_acquire()
             if (return_control)
             {
                 // spin until host sets flag to 1, indicating it returns control to this wave

@@ -6,6 +6,7 @@
 
 #include "data_headers.h"
 #include "hip_utils.h"
+#include "message_processor_base.h"
 
 namespace dh_comms
 {
@@ -13,7 +14,7 @@ namespace dh_comms
     {
     public:
         buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-               std::function<std::size_t(char *&message_p, size_t size, size_t sub_buf_no)> sub_buffer_processor,
+               message_processor_base& message_processor,
                std::size_t no_host_threads = 1);
         ~buffer();
         buffer(const buffer &) = delete;
@@ -26,7 +27,7 @@ namespace dh_comms
     private:
         std::size_t no_sub_buffers_;
         std::size_t sub_buffer_capacity_;
-        std::function<std::size_t(char *&message_p, size_t size, size_t sub_buf_no)> message_processor_;
+        message_processor_base& message_processor_;
 
         // device memory. Currently assumining a single GPU device.
         // TODO: take multiple devices into account

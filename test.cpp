@@ -1,7 +1,8 @@
-#include "buffer.h"
-#include "data_headers.h"
-#include "hip_utils.h"
 #include <hip/hip_runtime.h>
+#include "buffer.h"
+#include "hip_utils.h"
+#include "memory_heatmap.h"
+
 
 __global__ void test()
 {
@@ -20,36 +21,7 @@ __global__ void test()
         dh_comms::submit_message(message, user_defined_message_type);
     }
 }
-size_t process_sub_buffer(char *&message_p, size_t size, size_t sub_buf_no)
-{
-    using dh_comms::lane_header_t;
-    using dh_comms::wave_header_t;
 
-    printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, sub_buf_no);
-    wave_header_t *wave_header_p = (wave_header_t *)message_p;
-    size_t data_size = wave_header_p->data_size;
-    printf("wave_header:\n");
-    printf("\texec = 0x%016lx\n", wave_header_p->exec);
-    uint32_t active_lane_count = wave_header_p->active_lane_count;
-    printf("\tactive_lane_count = %u\n", active_lane_count);
-    printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
-           wave_header_p->block_idx_z, wave_header_p->wave_id);
-    printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
-           wave_header_p->cu_id);
-    message_p += sizeof(wave_header_t);
-    lane_header_t *lane_header_p = (lane_header_t *)message_p;
-    for (uint32_t lane = 0; lane != active_lane_count; ++lane)
-    {
-        printf("\t[thread] = [%u,%u,%u]\n", lane_header_p->thread_idx_x,
-               lane_header_p->thread_idx_y, lane_header_p->thread_idx_z);
-        ++lane_header_p;
-    }
-    message_p += data_size;
-    size -= (sizeof(wave_header_t) + data_size);
-    printf("\n");
-
-    return size;
-}
 
 int main()
 {
@@ -57,17 +29,21 @@ int main()
     constexpr size_t no_sub_buffers = 256;
     constexpr size_t sub_buffer_capacity = 64 * 1024;
     constexpr size_t no_host_threads = 1;
+    // memory heatmap configuration parameters
+    constexpr size_t page_size = 5;
+    constexpr bool verbose = false;
+    dh_comms::memory_heatmap_t memory_heatmap(page_size, verbose);
 
     // kernel launch parameters
-    constexpr int no_blocks = 3; // 1024 * 128 * 16 + 3;
+    constexpr int no_blocks = 1024 * no_sub_buffers;
     constexpr int threads_per_block = 128;
-    // constexpr size_t data_size = no_blocks * 64 * sizeof(dh_comms::packet);
+    constexpr size_t data_size = no_blocks * (2 * sizeof(dh_comms::wave_header_t) + 5 * sizeof(dh_comms::lane_header_t) + 5 * sizeof(uint64_t));
 
     hipEvent_t start, stop;
     CHK_HIP_ERR(hipEventCreate(&start));
     CHK_HIP_ERR(hipEventCreate(&stop));
     {
-        dh_comms::buffer buffer(no_sub_buffers, sub_buffer_capacity, process_sub_buffer, no_host_threads);
+        dh_comms::buffer buffer(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads);
         CHK_HIP_ERR(hipDeviceSynchronize());
         CHK_HIP_ERR(hipEventRecord(start));
         // if dh_comms sub-buffers get full during running of the kernel,
@@ -83,6 +59,9 @@ int main()
     CHK_HIP_ERR(hipEventSynchronize(stop));
     float ms;
     CHK_HIP_ERR(hipEventElapsedTime(&ms, start, stop));
-    // float mbps = (float)data_size / ms / 1000;
-    // printf("processed %lu bytes in %f ms: %.0f MiB/s\n", data_size, ms, mbps);
+    float mbps = (float)data_size / ms / 1000;
+    printf("processed %lu bytes in %f ms: %.0f MiB/s\n", data_size, ms, mbps);
+
+    printf("\n");
+    memory_heatmap.show();
 }

@@ -5,6 +5,7 @@ find_package(hip REQUIRED)
 #
 set(DH_COMMS_SOURCES
     buffer.cpp
+    memory_heatmap.cpp
     test.cpp
 )
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
