@@ -105,7 +105,7 @@ namespace dh_comms
         for( const auto& [first_page_address, count] : page_counts_)
         {
             auto last_page_address = first_page_address + page_size_ -1;
-            printf("page [%05lu:%05lu] %10lu accesses\n", first_page_address, last_page_address, count);
+            printf("page [%016lx:%016lx] %12lu accesses\n", first_page_address, last_page_address, count);
         }
     }
 
