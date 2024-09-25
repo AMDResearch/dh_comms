@@ -108,10 +108,10 @@ namespace dh_comms
         char *dst = &((char *)buffer)[byte_offset];
         while (remaining_bytes)
         {
-            size_t size = min(remaining_bytes, 4);
+            size_t size = min(remaining_bytes, sizeof(uint32_t));
             memcpy(dst, src, size);
-            src += 4;
-            dst += 4 * active_lane_count;
+            src += sizeof(uint32_t);
+            dst += active_lane_count * sizeof(uint32_t);
             remaining_bytes -= size;
         }
 
