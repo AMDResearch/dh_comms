@@ -1,9 +1,10 @@
 #include <hip/hip_runtime.h>
 #include "dh_comms.h"
+#include "dh_comms_dev.h"
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 
-__global__ void test(float *dst, float *src, float alpha, size_t size)
+__global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms::dh_comms_resources* rsrc)
 {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)
@@ -16,8 +17,8 @@ __global__ void test(float *dst, float *src, float alpha, size_t size)
     // we need to tag messages with a message type, so that
     // host processing code knows what to do with the message
     uint32_t user_defined_message_type = 0;
-    dh_comms::submit_message(dst + idx, user_defined_message_type);
-    dh_comms::submit_message(src + idx, user_defined_message_type);
+    dh_comms::submit_message(rsrc, dst + idx, user_defined_message_type);
+    dh_comms::submit_message(rsrc, src + idx, user_defined_message_type);
 }
 
 int main()
@@ -54,7 +55,7 @@ int main()
         // if dh_comms sub-buffers get full during running of the kernel,
         // device code notifies host code to process the full buffers and
         // clear them
-        test<<<no_blocks, threads_per_block>>>(dst, src, 3.14, size);
+        test<<<no_blocks, threads_per_block>>>(dst, src, 3.14, size, dh_comms.get_dev_rsrc_ptr());
 
         // dh_comms::dh_comms destructor waits for all kernels
         // to finish, and then processes any remaining data in the
