@@ -10,6 +10,20 @@
 
 namespace dh_comms
 {
+    struct dh_comms_resources
+    {
+        std::size_t no_sub_buffers_;
+        std::size_t sub_buffer_capacity_;
+        char *buffer_;
+        size_t* sub_buffer_sizes_;
+        uint8_t* atomic_flags_;
+
+        dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity);
+        dh_comms_resources(const dh_comms_resources&) = delete;
+        dh_comms_resources& operator=(const dh_comms_resources&) = delete;
+        ~dh_comms_resources();
+    };
+
     class dh_comms
     {
     public:
@@ -20,28 +34,18 @@ namespace dh_comms
         dh_comms(const dh_comms &) = delete;
         dh_comms &operator=(const dh_comms &) = delete;
 
+        dh_comms_resources* get_dev_rsrc_ptr();
+
     private:
         void process_sub_buffers(std::size_t first, std::size_t last);
         std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:
-        std::size_t no_sub_buffers_;
-        std::size_t sub_buffer_capacity_;
-        message_processor_base& message_processor_;
-
-        // device memory. Currently assumining a single GPU device.
-        // TODO: take multiple devices into account
-
-        // single memory buffer. Each workgroup writes to some sub-buffer, i.e., a section within the buffer.
-        char *buffer_ = nullptr;
-        // map that allows waves to determine which sub-buffer to write to, based on the XCC|SE|CU
-        // on which they run.
-        size_t *sub_buffer_sizes_;
-        // flags used for synchronizing data access between multiple device threads, and between
-        // device/host code
-        uint8_t *atomic_flags_;
-        volatile bool teardown_;
+        dh_comms_resources rsrc_;
+        dh_comms_resources* dev_rsrc_p_;
         std::vector<std::thread> sub_buffer_processors_;
+        message_processor_base& message_processor_;
+        volatile bool teardown_;
     };
 
     __device__ size_t no_sub_buffers_f();

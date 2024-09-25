@@ -31,13 +31,12 @@ namespace
     }
 
     template <typename T>
-    T *clone_to_device(const std::vector<T> &host_vec)
+    T *clone_to_device(const T &host_data)
     {
-        T *buffer;
-        size_t size = host_vec.size() * sizeof(T);
-        CHK_HIP_ERR(hipMalloc(&buffer, size));
-        CHK_HIP_ERR(hipMemcpy(buffer, host_vec.data(), size, hipMemcpyHostToDevice));
-        return buffer;
+        T *device_data;
+        CHK_HIP_ERR(hipMalloc(&device_data, sizeof(T)));
+        CHK_HIP_ERR(hipMemcpy(device_data, &host_data, sizeof(T), hipMemcpyHostToDevice));
+        return device_data;
     }
 
 } // unnamed namespace
@@ -50,17 +49,30 @@ namespace dh_comms
     __constant__ size_t *sub_buffer_sizes_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                   message_processor_base& message_processor,
-                   std::size_t no_host_threads)
+    dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity)
         : no_sub_buffers_(no_sub_buffers),
           sub_buffer_capacity_(sub_buffer_capacity),
-          message_processor_(message_processor),
           buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
-          atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_)))),
-          teardown_(false),
-          sub_buffer_processors_(init_host_threads(no_host_threads))
+          atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
+    {
+    }
+
+    dh_comms_resources::~dh_comms_resources()
+    {
+        CHK_HIP_ERR(hipFree(atomic_flags_));
+        CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
+        CHK_HIP_ERR(hipFree(buffer_));
+    }
+
+    dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
+                       message_processor_base &message_processor,
+                       std::size_t no_host_threads)
+        : rsrc_(no_sub_buffers, sub_buffer_capacity),
+          dev_rsrc_p_(clone_to_device(rsrc_)),
+          sub_buffer_processors_(init_host_threads(no_host_threads)),
+          message_processor_(message_processor),
+          teardown_(false)
     {
         if constexpr (shared_buffers_are_host_pinned)
         {
@@ -74,15 +86,15 @@ namespace dh_comms
         }
 
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(no_sub_buffers_c),
-                                      &no_sub_buffers_, sizeof(no_sub_buffers_)));
+                                      &rsrc_.no_sub_buffers_, sizeof(rsrc_.no_sub_buffers_)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_capacity_c),
-                                      &sub_buffer_capacity_, sizeof(sub_buffer_capacity_)));
+                                      &rsrc_.sub_buffer_capacity_, sizeof(rsrc_.sub_buffer_capacity_)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(buffer_c),
-                                      &buffer_, sizeof(void *)));
+                                      &rsrc_.buffer_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(sub_buffer_sizes_c),
-                                      &sub_buffer_sizes_, sizeof(void *)));
+                                      &rsrc_.sub_buffer_sizes_, sizeof(void *)));
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(atomic_flags_c),
-                                      &atomic_flags_, sizeof(void *)));
+                                      &rsrc_.atomic_flags_, sizeof(void *)));
     }
 
     dh_comms::~dh_comms()
@@ -93,17 +105,19 @@ namespace dh_comms
         {
             sbp.join();
         }
+        CHK_HIP_ERR(hipFree(dev_rsrc_p_));
+    }
 
-        CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
-        CHK_HIP_ERR(hipFree(atomic_flags_));
-        CHK_HIP_ERR(hipFree(buffer_));
+    dh_comms_resources *dh_comms::get_dev_rsrc_ptr()
+    {
+        return dev_rsrc_p_;
     }
 
     std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
     {
         assert(no_host_threads != 0);
-        std::size_t no_sub_buffers_per_thread = no_sub_buffers_ / no_host_threads;
-        std::size_t remainder = no_sub_buffers_ % no_host_threads;
+        std::size_t no_sub_buffers_per_thread = rsrc_.no_sub_buffers_ / no_host_threads;
+        std::size_t remainder = rsrc_.no_sub_buffers_ % no_host_threads;
 
         std::vector<std::thread> sub_buffer_processors;
         std::size_t first = 0;
@@ -118,7 +132,7 @@ namespace dh_comms
             sub_buffer_processors.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, first, last));
             first = last;
         }
-        assert(last == no_sub_buffers_);
+        assert(last == rsrc_.no_sub_buffers_);
 
         return sub_buffer_processors;
     }
@@ -133,22 +147,22 @@ namespace dh_comms
                 // set the flag to either 3 (if it wants control back after the host
                 // is done processing the sub-buffer) or 2 (if it doesn't want control back,
                 // and instead allows any wave to take control of the sub-buffer)
-                uint8_t flag = __atomic_load_n(&atomic_flags_[i], __ATOMIC_ACQUIRE);
+                uint8_t flag = __atomic_load_n(&rsrc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
                 if (flag > 1) // buffer is full: process and reset
                 {
                     // TODO: process data
-                    size_t size = sub_buffer_sizes_[i];
-                    size_t byte_offset = i * sub_buffer_capacity_;
-                    char *message_p = &buffer_[byte_offset];
+                    size_t size = rsrc_.sub_buffer_sizes_[i];
+                    size_t byte_offset = i * rsrc_.sub_buffer_capacity_;
+                    char *message_p = &rsrc_.buffer_[byte_offset];
                     while (size != 0)
                     {
                         size = message_processor_(message_p, size, i);
                     }
 
-                    sub_buffer_sizes_[i] = 0;
+                    rsrc_.sub_buffer_sizes_[i] = 0;
                     // setting the flag to either 1 (giving contol back to the signaling wave)
                     // or 0 (allowing any wave to take control of the sub-buffer)
-                    __atomic_store_n(&atomic_flags_[i], flag - 2, __ATOMIC_RELEASE);
+                    __atomic_store_n(&rsrc_.atomic_flags_[i], flag - 2, __ATOMIC_RELEASE);
                 }
             }
         }
@@ -157,15 +171,15 @@ namespace dh_comms
 
         for (size_t i = first; i != last; ++i)
         {
-            uint8_t flag = __atomic_load_n(&atomic_flags_[i], __ATOMIC_ACQUIRE);
+            uint8_t flag = __atomic_load_n(&rsrc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
             if (flag != 0) // Should not happen, indicates a missing atomic release from device code
             {
                 printf("Found non-zero flag for sub-buffer %lu\n", i);
             }
             // TODO: process data
-            size_t size = sub_buffer_sizes_[i];
-            size_t byte_offset = i * sub_buffer_capacity_;
-            char *message_p = &buffer_[byte_offset];
+            size_t size = rsrc_.sub_buffer_sizes_[i];
+            size_t byte_offset = i * rsrc_.sub_buffer_capacity_;
+            char *message_p = &rsrc_.buffer_[byte_offset];
             while (size != 0)
             {
                 size = message_processor_(message_p, size, i);
