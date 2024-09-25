@@ -68,38 +68,39 @@ namespace dh_comms
         uint64_t data_size = active_lane_count * (sizeof(lane_header_t) + 4 * ((sizeof(message_t) + 3) / 4));
 
         wave_acquire(sub_buf_idx, active_lane_id);
-
+        if(sizeof(wave_header_t) + data_size > sub_buffer_capacity)
+        {
+            // TODO: report error, but don't use printf in unconditionally compiled device code
+        }
+        size_t current_size = sub_buffer_sizes[sub_buf_idx];
+        if(current_size + sizeof(wave_header_t) + data_size > sub_buffer_capacity){
+            bool return_control = true;
+            wave_signal_host(sub_buf_idx, active_lane_id, return_control);
+            // the host clears the sub-buffer and resets its size to 0. Since it
+            // returns control to us, no other wave can have changed the sub -buffer
+            // size after wave_signal_host returns. So instead of re-reading the size
+            // from memory, we can deduce that it must be 0. This saves a slow memory
+            // read.
+            current_size = 0;
+        }
         // first write the wave header; only one wave takes care of that
         if (active_lane_id == 0)
         {
             // start with writing the single wave header, but make sure first there is sufficient space
             // we'll split up the message in dwords (4 bytes) for improved writing speed, so round up the message
             // size to the nearest multiple of 4 bytes
-            size_t current_size;
-            while (((current_size = sub_buffer_sizes[sub_buf_idx]) + sizeof(wave_header_t) + data_size) > sub_buffer_capacity)
-            {
-                bool return_control = true;
-                wave_signal_host(sub_buf_idx, active_lane_id, return_control);
-            }
             wave_header_t wave_header(exec, data_size, active_lane_count, user_type);
             size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size;
             wave_header_t *wave_header_p = (wave_header_t *)(&((char *)buffer)[byte_offset]);
             *wave_header_p = wave_header;
-            sub_buffer_sizes[sub_buf_idx] += sizeof(wave_header_t);
-            // printf("sizeof(wave_header_t) = %zu\n", sizeof(wave_header_t));
-            // printf("sizeof(lane_header_t) = %zu\n", sizeof(lane_header_t));
-            // printf("message size = %zu\n", sizeof(message_t));
-            // printf("data size (including lane header) = %zu\n", data_size);
         }
 
         // write the lane headers for the active lanes
-        size_t current_size = sub_buffer_sizes[sub_buf_idx];
-        lane_header_t lane_header;
-        size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size + active_lane_id * sizeof(lane_header);
+        size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size + sizeof(wave_header_t) + active_lane_id * sizeof(lane_header_t);
         lane_header_t *lane_header_p = (lane_header_t *)(&((char *)buffer)[byte_offset]);
-        // printf("lane_id = %u, active_lane_id = %u, sub-buffer size = %zu, writing to offset %zu\n", __lane_id(), __active_lane_id(), current_size, byte_offset);
+        lane_header_t lane_header;
         *lane_header_p = lane_header;
-        byte_offset += active_lane_count * sizeof(lane_header);
+        byte_offset += active_lane_count * sizeof(lane_header_t);
 
         // write the message one dword at a time in a coalesced fashion
         size_t remaining_bytes = sizeof(message);
@@ -117,7 +118,7 @@ namespace dh_comms
         // update sub-buffer size and release lock
         if (active_lane_id == 0)
         {
-            sub_buffer_sizes[sub_buf_idx] += data_size;
+            sub_buffer_sizes[sub_buf_idx] += sizeof(wave_header_t) + data_size;
         }
         wave_release(sub_buf_idx, active_lane_id);
     }
