@@ -10,7 +10,7 @@ namespace dh_comms
     public:
         memory_heatmap_t(size_t page_size, bool verbose = false);
         virtual ~memory_heatmap_t(){}
-        size_t operator()(char *&message_p, size_t size, size_t sub_buf_no);
+        virtual size_t operator()(char *&message_p, size_t size, size_t sub_buf_no);
         void show() const;
 
     private:
