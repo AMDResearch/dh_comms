@@ -19,7 +19,7 @@ namespace dh_comms
         return (block_id_z_grid_dim_xy_m + block_id_y_grid_dim_x_m + block_id_x_m) % no_sub_buffers;
     }
 
-    __device__ inline void wave_acquire(uint8_t* atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id)
+    __device__ inline void wave_acquire(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id)
     {
         if (active_lane_id == 0)
         {
@@ -36,7 +36,7 @@ namespace dh_comms
         }
     }
 
-    __device__ inline void wave_release(uint8_t* atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id)
+    __device__ inline void wave_release(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id)
     {
         if (active_lane_id == 0)
         {
@@ -45,7 +45,7 @@ namespace dh_comms
         }
     }
 
-    __device__ inline void wave_signal_host(uint8_t* atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id, bool return_control)
+    __device__ inline void wave_signal_host(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id, bool return_control)
     {
         if (active_lane_id == 0)
         {
@@ -69,7 +69,7 @@ namespace dh_comms
     }
 
     template <typename message_t>
-    __device__ inline void submit_message(dh_comms_resources* rsrc, const message_t &message, uint32_t user_type)
+    __device__ inline void submit_message(dh_comms_resources *rsrc, const message_t &message, uint32_t user_type)
     {
         unsigned int active_lane_id = __active_lane_id();
         size_t sub_buf_idx = get_sub_buffer_idx(rsrc->no_sub_buffers_);
@@ -81,12 +81,15 @@ namespace dh_comms
         uint64_t data_size = active_lane_count * (sizeof(lane_header_t) + 4 * ((sizeof(message_t) + 3) / 4));
 
         wave_acquire(rsrc->atomic_flags_, sub_buf_idx, active_lane_id);
-        if(sizeof(wave_header_t) + data_size > sub_buffer_capacity)
+        if (sizeof(wave_header_t) + data_size > sub_buffer_capacity)
         {
-            // TODO: report error, but don't use printf in unconditionally compiled device code
+            *rsrc->error_bits_ |= 1;
+            wave_release(rsrc->atomic_flags_, sub_buf_idx, active_lane_id);
+            return;
         }
         size_t current_size = sub_buffer_sizes[sub_buf_idx];
-        if(current_size + sizeof(wave_header_t) + data_size > sub_buffer_capacity){
+        if (current_size + sizeof(wave_header_t) + data_size > sub_buffer_capacity)
+        {
             bool return_control = true;
             wave_signal_host(rsrc->atomic_flags_, sub_buf_idx, active_lane_id, return_control);
             // the host clears the sub-buffer and resets its size to 0. Since it

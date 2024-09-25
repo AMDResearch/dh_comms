@@ -48,6 +48,7 @@ namespace dh_comms
           sub_buffer_capacity_(sub_buffer_capacity),
           buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
           sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
+          error_bits_((decltype(error_bits_))allocate_shared_buffer(sizeof(decltype(*error_bits_)))),
           atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
     {
     }
@@ -55,6 +56,7 @@ namespace dh_comms
     dh_comms_resources::~dh_comms_resources()
     {
         CHK_HIP_ERR(hipFree(atomic_flags_));
+        CHK_HIP_ERR(hipFree(error_bits_));
         CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
         CHK_HIP_ERR(hipFree(buffer_));
     }
@@ -64,7 +66,7 @@ namespace dh_comms
                        std::size_t no_host_threads)
         : rsrc_(no_sub_buffers, sub_buffer_capacity),
           dev_rsrc_p_(clone_to_device(rsrc_)),
-          sub_buffer_processors_(init_host_threads(no_host_threads)),
+          sub_buffer_processors_(init_host_threads(no_host_threads, message_processor.is_thread_safe())),
           message_processor_(message_processor),
           teardown_(false)
     {
@@ -88,6 +90,10 @@ namespace dh_comms
         {
             sbp.join();
         }
+        if(*rsrc_.error_bits_ & 1)
+        {
+            printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
+        }
         CHK_HIP_ERR(hipFree(dev_rsrc_p_));
     }
 
@@ -96,9 +102,14 @@ namespace dh_comms
         return dev_rsrc_p_;
     }
 
-    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
+    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads,
+                                                         bool message_processor_is_thread_safe)
     {
         assert(no_host_threads != 0);
+        if(no_host_threads > 1 and not message_processor_is_thread_safe){
+            printf("Thread-safe message processor required for multi-threaded host processing; exiting\n");
+            exit(EXIT_FAILURE);
+        }
         std::size_t no_sub_buffers_per_thread = rsrc_.no_sub_buffers_ / no_host_threads;
         std::size_t remainder = rsrc_.no_sub_buffers_ % no_host_threads;
 
