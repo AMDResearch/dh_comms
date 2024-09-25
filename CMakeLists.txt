@@ -4,7 +4,7 @@ find_package(hip REQUIRED)
 
 # single executable target
 set(DH_COMMS_SOURCES
-    buffer.cpp
+    dh_comms.cpp
     memory_heatmap.cpp
     test.cpp
 )
@@ -20,7 +20,7 @@ target_link_options(test PRIVATE -fgpu-rdc)
 
 #[[
 set(DH_COMMS_SOURCES
-    buffer.cpp
+    dh_comms.cpp
 )
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})

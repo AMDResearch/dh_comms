@@ -6,7 +6,7 @@
 #include <hip/hip_runtime.h>
 #include "hip_utils.h"
 
-#include "buffer.h"
+#include "dh_comms.h"
 #include "data_headers.h"
 
 namespace
@@ -50,7 +50,7 @@ namespace dh_comms
     __constant__ size_t *sub_buffer_sizes_c;
     __constant__ uint8_t *atomic_flags_c;
 
-    buffer::buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
+    dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                    message_processor_base& message_processor,
                    std::size_t no_host_threads)
         : no_sub_buffers_(no_sub_buffers),
@@ -72,9 +72,6 @@ namespace dh_comms
             printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                    __FILE__, __LINE__);
         }
-        printf("from buffer ctor:\n");
-        printf("no_sub_buffers_ = %lu\n", no_sub_buffers_);
-        printf("sub_buffer_capacity_ = %lu\n", sub_buffer_capacity_);
 
         CHK_HIP_ERR(hipMemcpyToSymbol(HIP_SYMBOL(no_sub_buffers_c),
                                       &no_sub_buffers_, sizeof(no_sub_buffers_)));
@@ -88,7 +85,7 @@ namespace dh_comms
                                       &atomic_flags_, sizeof(void *)));
     }
 
-    buffer::~buffer()
+    dh_comms::~dh_comms()
     {
         CHK_HIP_ERR(hipDeviceSynchronize());
         teardown_ = true;
@@ -102,7 +99,7 @@ namespace dh_comms
         CHK_HIP_ERR(hipFree(buffer_));
     }
 
-    std::vector<std::thread> buffer::init_host_threads(std::size_t no_host_threads)
+    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
     {
         assert(no_host_threads != 0);
         std::size_t no_sub_buffers_per_thread = no_sub_buffers_ / no_host_threads;
@@ -118,7 +115,7 @@ namespace dh_comms
             {
                 ++last;
             }
-            sub_buffer_processors.emplace_back(std::thread(&buffer::process_sub_buffers, this, first, last));
+            sub_buffer_processors.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, first, last));
             first = last;
         }
         assert(last == no_sub_buffers_);
@@ -126,7 +123,7 @@ namespace dh_comms
         return sub_buffer_processors;
     }
 
-    void buffer::process_sub_buffers(std::size_t first, std::size_t last)
+    void dh_comms::process_sub_buffers(std::size_t first, std::size_t last)
     {
         while (not teardown_)
         {

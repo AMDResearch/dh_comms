@@ -10,15 +10,15 @@
 
 namespace dh_comms
 {
-    class buffer
+    class dh_comms
     {
     public:
-        buffer(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
+        dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                message_processor_base& message_processor,
                std::size_t no_host_threads = 1);
-        ~buffer();
-        buffer(const buffer &) = delete;
-        buffer &operator=(const buffer &) = delete;
+        ~dh_comms();
+        dh_comms(const dh_comms &) = delete;
+        dh_comms &operator=(const dh_comms &) = delete;
 
     private:
         void process_sub_buffers(std::size_t first, std::size_t last);

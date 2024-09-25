@@ -1,5 +1,5 @@
 #include <hip/hip_runtime.h>
-#include "buffer.h"
+#include "dh_comms.h"
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 
@@ -35,7 +35,7 @@ int main()
     CHK_HIP_ERR(hipMalloc(&src, size * sizeof(float)));
     CHK_HIP_ERR(hipMalloc(&dst, size * sizeof(float)));
 
-    // dh_comms::buffer configuration parameters
+    // dh_comms::dh_comms configuration parameters
     constexpr size_t no_sub_buffers = 256;
     constexpr size_t sub_buffer_capacity = 64 * 1024;
     constexpr size_t no_host_threads = 1;
@@ -48,7 +48,7 @@ int main()
     CHK_HIP_ERR(hipEventCreate(&start));
     CHK_HIP_ERR(hipEventCreate(&stop));
     {
-        dh_comms::buffer buffer(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads);
+        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads);
         CHK_HIP_ERR(hipDeviceSynchronize());
         CHK_HIP_ERR(hipEventRecord(start));
         // if dh_comms sub-buffers get full during running of the kernel,
@@ -56,7 +56,7 @@ int main()
         // clear them
         test<<<no_blocks, threads_per_block>>>(dst, src, 3.14, size);
 
-        // dh_comms::buffer destructor waits for all kernels
+        // dh_comms::dh_comms destructor waits for all kernels
         // to finish, and then processes any remaining data in the
         // sub-buffers
     }
