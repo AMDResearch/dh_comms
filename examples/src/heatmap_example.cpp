@@ -4,7 +4,7 @@
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 
-__global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms::dh_comms_resources* rsrc)
+__global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms::dh_comms_resources *rsrc)
 {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)
@@ -30,7 +30,8 @@ int main()
     constexpr size_t messages_per_wave = 2;
     constexpr size_t waves_per_block = (threads_per_block + 63) / 64;
     constexpr size_t data_size = no_blocks * (messages_per_wave * waves_per_block * sizeof(dh_comms::wave_header_t) +
-        messages_per_wave * threads_per_block * (sizeof(dh_comms::lane_header_t) + sizeof(float*)));
+                                              messages_per_wave * threads_per_block *
+                                                  (sizeof(dh_comms::lane_header_t) + sizeof(float *)));
 
     float *src, *dst;
     CHK_HIP_ERR(hipMalloc(&src, size * sizeof(float)));
@@ -49,7 +50,7 @@ int main()
     CHK_HIP_ERR(hipEventCreate(&start));
     CHK_HIP_ERR(hipEventCreate(&stop));
     {
-        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads);
+        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads, verbose);
         CHK_HIP_ERR(hipDeviceSynchronize());
         CHK_HIP_ERR(hipEventRecord(start));
         // if dh_comms sub-buffers get full during running of the kernel,

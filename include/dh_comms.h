@@ -30,7 +30,8 @@ namespace dh_comms
     public:
         dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                  message_processor_base &message_processor,
-                 std::size_t no_host_threads = 1);
+                 std::size_t no_host_threads = 1,
+                 bool verbose = false);
         ~dh_comms();
         dh_comms(const dh_comms &) = delete;
         dh_comms &operator=(const dh_comms &) = delete;
@@ -48,6 +49,7 @@ namespace dh_comms
         std::vector<std::thread> sub_buffer_processors_;
         message_processor_base &message_processor_;
         volatile bool teardown_;
+        bool verbose_;
     };
 
 } // namespace dh_comms

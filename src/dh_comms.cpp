@@ -63,22 +63,26 @@ namespace dh_comms
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                        message_processor_base &message_processor,
-                       std::size_t no_host_threads)
+                       std::size_t no_host_threads, bool verbose)
         : rsrc_(no_sub_buffers, sub_buffer_capacity),
           dev_rsrc_p_(clone_to_device(rsrc_)),
           sub_buffer_processors_(init_host_threads(no_host_threads, message_processor.is_thread_safe())),
           message_processor_(message_processor),
-          teardown_(false)
+          teardown_(false),
+          verbose_(verbose)
     {
-        if constexpr (shared_buffers_are_host_pinned)
+        if (verbose_)
         {
-            printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in pinned host memory\n",
-                   __FILE__, __LINE__);
-        }
-        else
-        {
-            printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
-                   __FILE__, __LINE__);
+            if constexpr (shared_buffers_are_host_pinned)
+            {
+                printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in pinned host memory\n",
+                       __FILE__, __LINE__);
+            }
+            else
+            {
+                printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
+                       __FILE__, __LINE__);
+            }
         }
     }
 
@@ -90,7 +94,7 @@ namespace dh_comms
         {
             sbp.join();
         }
-        if(*rsrc_.error_bits_ & 1)
+        if (*rsrc_.error_bits_ & 1)
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
         }
@@ -106,7 +110,8 @@ namespace dh_comms
                                                          bool message_processor_is_thread_safe)
     {
         assert(no_host_threads != 0);
-        if(no_host_threads > 1 and not message_processor_is_thread_safe){
+        if (no_host_threads > 1 and not message_processor_is_thread_safe)
+        {
             printf("Thread-safe message processor required for multi-threaded host processing; exiting\n");
             exit(EXIT_FAILURE);
         }
