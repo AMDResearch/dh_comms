@@ -18,4 +18,4 @@ target_include_directories(dh_comms PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
 set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-add_subdirectory(examples examples)
+add_subdirectory(examples)
