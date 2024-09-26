@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 project(dh_comms LANGUAGES HIP CXX)
 find_package(hip REQUIRED)
 
+if("${CMAKE_BUILD_TYPE}" STREQUAL "")
+    set(CMAKE_BUILD_TYPE "RelWithDebInfo")
+endif()
+MESSAGE(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
 
 set(DH_COMMS_SOURCES
     src/dh_comms.cpp
