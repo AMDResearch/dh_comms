@@ -7,8 +7,15 @@ mkdir build
 cd build
 cmake ..
 make
+```
+```
 # run example
 examples/bin/heatmap_example
+```
+```
+# build HTML documentation (requires Doxygen to be installed)
+make doc
+# to view HTML documentation: point your web browser to build/doc/html/index.html
 ```
 
 ## Design and Usage
