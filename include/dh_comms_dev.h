@@ -69,7 +69,7 @@ namespace dh_comms
     }
 
     template <typename message_t>
-    __device__ inline void submit_message(dh_comms_resources *rsrc, const message_t &message, uint32_t user_type)
+    __device__ inline void v_submit_message(dh_comms_resources *rsrc, const message_t &message, uint32_t user_type)
     {
         unsigned int active_lane_id = __active_lane_id();
         size_t sub_buf_idx = get_sub_buffer_idx(rsrc->no_sub_buffers_);
