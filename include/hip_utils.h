@@ -53,7 +53,7 @@ __device__ static inline void __set_exec(uint64_t exec)
 
 // Returns the wave number in the thread block for any thread, based on its possibly
 // higher-dimensional thread coordinates.
-__device__ static inline unsigned int __wave_id()
+__device__ static inline unsigned int __wave_num()
 {
     return (threadIdx.z * blockDim.y * blockDim.x + threadIdx.y * blockDim.x + threadIdx.x) / 64;
 }

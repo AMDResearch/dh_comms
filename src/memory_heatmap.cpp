@@ -24,7 +24,7 @@ namespace dh_comms
             printf("\texec = 0x%016lx\n", wave_header_p->exec);
             printf("\tactive_lane_count = %u\n", active_lane_count);
             printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
-                   wave_header_p->block_idx_z, wave_header_p->wave_id);
+                   wave_header_p->block_idx_z, wave_header_p->wave_num);
             printf("\txcc:se:cu = %02u:%02u:%02u\n", wave_header_p->xcc_id, wave_header_p->se_id,
                    wave_header_p->cu_id);
         }
