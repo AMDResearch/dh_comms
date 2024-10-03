@@ -9,11 +9,51 @@
 #include "dh_comms.h"
 #include "data_headers.h"
 
+namespace dh_comms
+{
+
+    dh_comms_mem_mgr::dh_comms_mem_mgr()
+    {
+        return;
+    }
+
+    dh_comms_mem_mgr::~dh_comms_mem_mgr()
+    {
+    }
+
+    void * dh_comms_mem_mgr::alloc(std::size_t size)
+    {
+        void *buffer;
+        CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
+        zero((char *)buffer, size);
+        return buffer;
+    }
+
+    void dh_comms_mem_mgr::free(void *ptr)
+    {
+        CHK_HIP_ERR(hipFree(ptr));
+        return;
+    }
+
+    void * dh_comms_mem_mgr::copy(void *dst, void *src, std::size_t size)
+    {
+        memcpy(dst, src, size);
+        return dst;
+    }
+
+    std::size_t dh_comms_mem_mgr::zero(void *buffer, std::size_t size)
+    {
+        std::vector<char> zeros(size);
+        std::copy(zeros.cbegin(), zeros.cend(), (char *)buffer);
+        return size;
+    }
+}
+
 namespace
 {
     constexpr bool shared_buffers_are_host_pinned = true;
-
-    void *allocate_shared_buffer(size_t size)
+    
+    /*void *allocate_shared_buffer(size_t size)
     {
         void *buffer;
         std::vector<char> zeros(size);
@@ -28,7 +68,7 @@ namespace
             CHK_HIP_ERR(hipMemcpy(buffer, zeros.data(), size, hipMemcpyHostToDevice));
         }
         return buffer;
-    }
+    }*/
 
     template <typename T>
     T *clone_to_device(const T &host_data)
@@ -43,28 +83,38 @@ namespace
 
 namespace dh_comms
 {
-    dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity)
-        : no_sub_buffers_(no_sub_buffers),
+    dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, dh_comms_mem_mgr& mgr)
+        : mgr_(mgr),
+          no_sub_buffers_(no_sub_buffers),
           sub_buffer_capacity_(sub_buffer_capacity),
-          buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
-          sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
-          error_bits_((decltype(error_bits_))allocate_shared_buffer(sizeof(decltype(*error_bits_)))),
-          atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
+          buffer_((decltype(buffer_))mgr_.alloc(no_sub_buffers_ * sub_buffer_capacity_)),
+          sub_buffer_sizes_((decltype(sub_buffer_sizes_))mgr_.alloc(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
+          error_bits_((decltype(error_bits_))mgr_.alloc(sizeof(decltype(*error_bits_)))),
+          atomic_flags_((decltype(atomic_flags_))mgr_.alloc(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
+          //buffer_((decltype(buffer_))allocate_shared_buffer(no_sub_buffers_ * sub_buffer_capacity_)),
+          //sub_buffer_sizes_((decltype(sub_buffer_sizes_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*sub_buffer_sizes_)))),
+          //error_bits_((decltype(error_bits_))allocate_shared_buffer(sizeof(decltype(*error_bits_)))),
+          //atomic_flags_((decltype(atomic_flags_))allocate_shared_buffer(no_sub_buffers_ * sizeof(decltype(*atomic_flags_))))
     {
     }
 
     dh_comms_resources::~dh_comms_resources()
     {
-        CHK_HIP_ERR(hipFree(atomic_flags_));
-        CHK_HIP_ERR(hipFree(error_bits_));
-        CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
-        CHK_HIP_ERR(hipFree(buffer_));
+        mgr_.free(atomic_flags_);
+        mgr_.free(error_bits_);
+        mgr_.free(sub_buffer_sizes_);
+        mgr_.free(buffer_);
+        //CHK_HIP_ERR(hipFree(atomic_flags_));
+        //CHK_HIP_ERR(hipFree(error_bits_));
+        //CHK_HIP_ERR(hipFree(sub_buffer_sizes_));
+        //CHK_HIP_ERR(hipFree(buffer_));
     }
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                        message_processor_base &message_processor,
-                       std::size_t no_host_threads, bool verbose)
-        : rsrc_(no_sub_buffers, sub_buffer_capacity),
+                       std::size_t no_host_threads, bool verbose, dh_comms_mem_mgr *mgr)
+        : mgr_( mgr ? mgr : &default_mgr_),
+          rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_)),
           sub_buffer_processors_(init_host_threads(no_host_threads, message_processor.is_thread_safe())),
           message_processor_(message_processor),
