@@ -2,6 +2,7 @@
 
 //! @file
 
+#include "data_headers.h"
 #include "dh_comms.h"
 
 // device functions
