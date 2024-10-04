@@ -5,7 +5,7 @@ find_package(hip REQUIRED)
 if("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
-MESSAGE(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
+message(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
 
 set(DH_COMMS_SOURCES
     src/dh_comms.cpp
@@ -17,6 +17,16 @@ target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
 target_include_directories(dh_comms PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
 set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+file(GLOB_RECURSE DH_COMMS_INCLUDE_FILES "include/*.h")
+set_target_properties(dh_comms PROPERTIES PUBLIC_HEADER "${DH_COMMS_INCLUDE_FILES}")
+include(GNUInstallDirs)
+install(TARGETS dh_comms
+    LIBRARY DESTINATION lib
+    PUBLIC_HEADER DESTINATION include/dh_comms)
+
+message(STATUS "==> {Library,include} install dirs: ${CMAKE_INSTALL_PREFIX}/{${CMAKE_INSTALL_LIBDIR},${CMAKE_INSTALL_INCLUDEDIR}/dh_comms}")
+message(STATUS "==> To change install dirs, rerun cmake with argument \"-DCMAKE_INSTALL_PREFIX=/path/to/install/dir\"")
 
 add_subdirectory(examples)
 add_subdirectory(doc)
