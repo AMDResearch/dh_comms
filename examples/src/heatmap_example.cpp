@@ -1,6 +1,6 @@
 #include <hip/hip_runtime.h>
-#include "dh_comms.h"
 #include "dh_comms_dev.h"
+#include "dh_comms.h"
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 
