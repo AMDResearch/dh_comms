@@ -5,7 +5,6 @@
 #include <functional>
 
 #include "data_headers.h"
-#include "hip_utils.h"
 #include "message_processor_base.h"
 
 namespace dh_comms
