@@ -33,7 +33,7 @@ namespace dh_comms
         // process information in the lane headers
         if(verbose_)
         {
-            printf("thread headers:\n");
+            printf("lane headers:\n");
         }
         lane_header_t *lane_header_p = (lane_header_t *)message_p;
         for (uint32_t lane = 0; lane != active_lane_count; ++lane)
