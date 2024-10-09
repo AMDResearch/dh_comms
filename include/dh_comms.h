@@ -18,15 +18,9 @@ namespace dh_comms
         virtual void * copy(void *dst, void *src, std::size_t size);
         virtual std::size_t zero(void *buffer, std::size_t size);
     };
-    //! \brief Keeps track of resources used by device and host code for exchanging data.
-    //!
-    //! The main data buffer is partitioned into a number of equal-sized sub-buffers to
-    //! allow for concurrent access. Multiple waves can write to different sub-buffers
-    //! simultaneously. Waves that want to write to the same sub-buffer are serialized
-    //! using atomics.
-    struct dh_comms_resources
+
+    struct dh_comms_descriptor
     {
-        dh_comms_mem_mgr& mgr_;
         std::size_t no_sub_buffers_;        //!< Number of sub-buffers into which the main data buffer is partitioned.
         std::size_t sub_buffer_capacity_;   //!< The maximum number of bytes each of the sub-buffers can hold.
         char *buffer_;                      //!< Pointer to the main data buffer.
@@ -37,6 +31,17 @@ namespace dh_comms
                                             //!< used to track error conditions for the sub-buffer, such as a wave attempting
                                             //!< to write more than sub_buffer_capacity_ bytes to a sub-buffer.
         uint8_t *atomic_flags_;
+    };
+    //! \brief Keeps track of resources used by device and host code for exchanging data.
+    //!
+    //! The main data buffer is partitioned into a number of equal-sized sub-buffers to
+    //! allow for concurrent access. Multiple waves can write to different sub-buffers
+    //! simultaneously. Waves that want to write to the same sub-buffer are serialized
+    //! using atomics.
+    struct dh_comms_resources
+    {
+        dh_comms_descriptor desc_;
+        dh_comms_mem_mgr& mgr_;
 
         //! Constructor; allocates memory resources based on its arguments.
         dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, dh_comms_mem_mgr& mgr);
@@ -66,7 +71,7 @@ namespace dh_comms
         ~dh_comms();
         dh_comms(const dh_comms &) = delete;
         dh_comms &operator=(const dh_comms &) = delete;
-        dh_comms_resources *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
+        dh_comms_descriptor *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
     private:
         void process_sub_buffers(std::size_t first, std::size_t last);
@@ -77,7 +82,7 @@ namespace dh_comms
         dh_comms_mem_mgr default_mgr_;
         dh_comms_mem_mgr * mgr_;
         dh_comms_resources rsrc_;
-        dh_comms_resources *dev_rsrc_p_;
+        dh_comms_descriptor *dev_rsrc_p_;
         std::vector<std::thread> sub_buffer_processors_;
         message_processor_base &message_processor_;
         volatile bool teardown_;

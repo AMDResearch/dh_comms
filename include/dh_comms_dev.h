@@ -100,7 +100,7 @@ namespace dh_comms
     //! \brief Submit a message of any type that is valid in device code from the device to the host.
     //!
     //! Messages are submitted on a per-wave basis, and only the active lanes in the wave submit.
-    __device__ inline void v_submit_message(dh_comms_resources *rsrc, //!< Pointer to dh_comms device resources used for message submission.
+    __device__ inline void v_submit_message(dh_comms_descriptor *rsrc, //!< Pointer to dh_comms device resources used for message submission.
                                                                       //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
                                                                       //!< and passed as a kernel argument to kernels that want to use v_submit_message().
                                             const void* message,      //!< Pointer to message to be submitted.

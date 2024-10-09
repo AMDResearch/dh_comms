@@ -4,7 +4,7 @@
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 
-__global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms::dh_comms_resources *rsrc)
+__global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms::dh_comms_descriptor *rsrc)
 {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= size)
