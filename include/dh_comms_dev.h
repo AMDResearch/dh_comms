@@ -105,9 +105,12 @@ namespace dh_comms
                                                                       //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
                                                                       //!< and passed as a kernel argument to kernels that want to use v_submit_message().
                                             const message_t &message, //!< Message to be submitted.
-                                            uint32_t user_type)       //!< Tag to distinguish between different kinds of messages, used by host
+                                            uint32_t src_loc_idx = 0, //!< Integer to identify the source code location from which v_submit_message() is called.
+                                            uint32_t user_type = 0)   //!< Tag to distinguish between different kinds of messages, used by host
                                                                       //!< code that processes the messages.
     {
+        uint64_t timestamp = __clock64();                               // Get the timestamp first so that it is minimally perturbed by the direct and
+                                                                        // indirect instructions issued by v_submit_message()
         unsigned int active_lane_id = __active_lane_id();               // One lane is doing some operations on behalf of the whole wave. That must be
                                                                         // a lane that is active, i.e., not masked out in the execution mask.
                                                                         // Also: all active lanes write data, and they use the active lane id to determine
@@ -145,7 +148,7 @@ namespace dh_comms
         // First write the wave header; only one wave takes care of that
         if (active_lane_id == 0)
         {
-            wave_header_t wave_header(exec, data_size, active_lane_count, user_type);
+            wave_header_t wave_header(exec, data_size, timestamp, active_lane_count, src_loc_idx, user_type);
             size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size;
             wave_header_t *wave_header_p = (wave_header_t *)(&buffer[byte_offset]);
             *wave_header_p = wave_header;

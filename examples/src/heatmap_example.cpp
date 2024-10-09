@@ -13,12 +13,8 @@ __global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms:
     }
     dst[idx] = alpha * src[idx];
 
-    // since our buffers can have a mix of multiple types of messages,
-    // we need to tag messages with a message type, so that
-    // host processing code knows what to do with the message
-    uint32_t user_defined_message_type = 0;
-    dh_comms::v_submit_message(rsrc, dst + idx, user_defined_message_type);
-    dh_comms::v_submit_message(rsrc, src + idx, user_defined_message_type);
+    dh_comms::v_submit_message(rsrc, dst + idx, __LINE__);
+    dh_comms::v_submit_message(rsrc, src + idx, __LINE__);
 }
 
 int main()

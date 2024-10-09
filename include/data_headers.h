@@ -7,14 +7,16 @@ namespace dh_comms
     //! User device code does not use wave headers directly, but user host code may.
     struct wave_header_t
     {
-        uint64_t exec;                  //!< Execution mask of the wavefront submitting the message.
+        uint64_t exec; //!< Execution mask of the wavefront submitting the message.
 
         uint64_t data_size;             //!< \brief Size of the data following the wave header.
                                         //!<
                                         //!< This is computed as: (number of active lanes) * (lane header (4 bytes) +
                                         //!< number of data bytes per lane), rounded up to nearest multiple of 4 bytes.
+        uint64_t timestamp;             //!< GPU timestamp of the moment the message was submitted.
         uint32_t active_lane_count : 7; //!< number of active lanes in the wavefront, i.e., number of 1-bits in the execution mask
-        uint32_t unused32 : 25;         //!< Padding; reserved for future use.
+        uint32_t src_loc_idx : 25;      //!< Integer that can be used to uniquely identify the source code location from which
+                                        //!< the message was submitted.
         uint32_t user_type;             //!< \brief User-defined tag that indicates the content/interpretation of the data.
                                         //!<
                                         //!< Since kernels can submit any type of data that is valid on the device, such as
@@ -54,7 +56,8 @@ namespace dh_comms
 
         //! Wave header constructor; wave header members for which there is no corresponding
         //! constructor argument are detected and assigned by the constructor.
-        __device__ wave_header_t(uint64_t exec, uint64_t data_size, uint32_t active_lane_count, uint32_t user_type);
+        __device__ wave_header_t(uint64_t exec, uint64_t data_size, uint64_t timestamp, uint32_t active_lane_count,
+                                 uint32_t src_loc_idx, uint32_t user_type);
     };
 
     //! \brief After the wave header, there's a lane header for each of the active lanes in the wavefront.

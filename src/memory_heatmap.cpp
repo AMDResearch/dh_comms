@@ -22,6 +22,9 @@ namespace dh_comms
             printf("[Host] %zu bytes of data remaining in sub-buffer %zu\n", size, sub_buf_no);
             printf("wave_header:\n");
             printf("\texec = 0x%016lx\n", wave_header_p->exec);
+            printf("\ttimestamp = %lu\n", wave_header_p->timestamp);
+            printf("\tsrc_loc_idx = %u\n", wave_header_p->src_loc_idx);
+            printf("\tuser_type = %u\n", wave_header_p->user_type);
             printf("\tactive_lane_count = %u\n", active_lane_count);
             printf("\t[block]:wave = [%u,%u,%u]:%u\n", wave_header_p->block_idx_x, wave_header_p->block_idx_y,
                    wave_header_p->block_idx_z, wave_header_p->wave_num);

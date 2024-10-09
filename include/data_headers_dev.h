@@ -3,11 +3,15 @@
 #include "data_headers.h"
 #include "hip_utils.h"
 
-namespace dh_comms {
-    __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size, uint32_t active_lane_count, uint32_t user_type)
+namespace dh_comms
+{
+    __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size, uint64_t timestamp,
+                                                   uint32_t active_lane_count, uint32_t src_loc_idx, uint32_t user_type)
         : exec(exec),
           data_size(data_size),
+          timestamp(timestamp),
           active_lane_count(active_lane_count),
+          src_loc_idx(src_loc_idx),
           user_type(user_type),
           block_idx_x(blockIdx.x),
           block_idx_y(blockIdx.y),
