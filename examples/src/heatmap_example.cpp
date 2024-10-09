@@ -13,8 +13,10 @@ __global__ void test(float *dst, float *src, float alpha, size_t size, dh_comms:
     }
     dst[idx] = alpha * src[idx];
 
-    dh_comms::v_submit_message(rsrc, dst + idx, __LINE__);
-    dh_comms::v_submit_message(rsrc, src + idx, __LINE__);
+    float* src_address = src + idx;
+    float* dst_address = dst + idx;
+    dh_comms::v_submit_message(rsrc, &src_address, sizeof(float*), __LINE__);
+    dh_comms::v_submit_message(rsrc, &dst_address, sizeof(float*), __LINE__);
 }
 
 int main()

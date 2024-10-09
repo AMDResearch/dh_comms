@@ -100,11 +100,11 @@ namespace dh_comms
     //! \brief Submit a message of any type that is valid in device code from the device to the host.
     //!
     //! Messages are submitted on a per-wave basis, and only the active lanes in the wave submit.
-    template <typename message_t>
     __device__ inline void v_submit_message(dh_comms_resources *rsrc, //!< Pointer to dh_comms device resources used for message submission.
                                                                       //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
                                                                       //!< and passed as a kernel argument to kernels that want to use v_submit_message().
-                                            const message_t &message, //!< Message to be submitted.
+                                            const void* message,      //!< Pointer to message to be submitted.
+                                            size_t message_size,      //!< Size of the message in bytes
                                             uint32_t src_loc_idx = 0, //!< Integer to identify the source code location from which v_submit_message() is called.
                                             uint32_t user_type = 0)   //!< Tag to distinguish between different kinds of messages, used by host
                                                                       //!< code that processes the messages.
@@ -124,7 +124,7 @@ namespace dh_comms
 
                                                                         // size of the data after the wave header. Data is written in multiples of
                                                                         // four bytes, so round up to multiple of four.
-        uint64_t data_size = active_lane_count * (sizeof(lane_header_t) + 4 * ((sizeof(message_t) + 3) / 4));
+        uint64_t data_size = active_lane_count * (sizeof(lane_header_t) + 4 * ((message_size + 3) / 4));
 
         wave_acquire(rsrc->atomic_flags_, sub_buf_idx, active_lane_id); // Get exclusive access to the sub-buffer and associated data
         if (sizeof(wave_header_t) + data_size > sub_buffer_capacity)    // Sanity check: does the message even fit in an empty sub-buffer?
@@ -188,8 +188,8 @@ namespace dh_comms
         // Write the message four bytes at a time, taking care of
         // the tail of the message, which may have fewer than
         // four byes.
-        size_t remaining_bytes = sizeof(message);
-        char *src = (char *)&message;
+        size_t remaining_bytes = message_size;
+        char *src = (char*) message;
         char *dst = &(buffer)[byte_offset];
         while (remaining_bytes)
         {
