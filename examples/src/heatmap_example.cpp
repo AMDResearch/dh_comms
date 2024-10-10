@@ -9,6 +9,8 @@
 
 __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_comms::dh_comms_resources *rsrc)
 {
+    dh_comms::s_submit_timestamp(rsrc); // scalar message without lane headers or data
+
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= array_size)
     {
