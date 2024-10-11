@@ -60,12 +60,25 @@ namespace dh_comms
     }
 
     // Have the calling wave release its exclusive read/write access to a sub-buffer
+    // Note: we should be able to do this with an __atomic_store, but in some cases, the
+    // compiler implemented the __atomic_store without a memory operation, leading to an
+    // infinite spin loop for the next call to wave_acquire. Implementing this function
+    // with an __atomic_compare_exchange instead resolves the issue for the cases we
+    // have seen so far.
     __device__ inline void wave_release(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id)
     {
-        if (active_lane_id == 0) // only one lane releases the sub-buffer on behalf of the wave
+        if (active_lane_id == 0) // only one lane acquires the lock on behalf of the wave
         {
-            uint8_t flag_value = 0; // 0 -> sub-buffer is not locked
-            __atomic_store(&atomic_flags[sub_buf_idx], &flag_value, __ATOMIC_RELEASE);
+            uint8_t expected = 1; // 1 -> sub-buffer is locked by this wave
+            uint8_t desired = 0;  // 0 -> sub-buffer is unlocked
+            bool weak = false;
+            while (not __atomic_compare_exchange(&atomic_flags[sub_buf_idx], &expected, &desired, weak,
+                                                 __ATOMIC_RELEASE, __ATOMIC_RELAXED))
+            {
+                // __atomic_compare_exchange returns the value at the address (first argument) in
+                // the second argument (expected), so we need to reset it in this spin-loop
+                expected = 1;
+            }
         }
     }
 
@@ -127,7 +140,7 @@ namespace dh_comms
         uint64_t lane_header_size = submit_lane_headers ? sizeof(lane_header_t) : 0;
         uint64_t submitting_lane_count = is_vector_message ? active_lane_count : 1;
         uint64_t rounded_message_size = sizeof(uint32_t) * ((message_size + sizeof(uint32_t) - 1) / sizeof(uint32_t));
-        uint64_t data_size = submitting_lane_count * (lane_header_size + rounded_message_size);
+        uint64_t data_size = active_lane_count * lane_header_size + submitting_lane_count * rounded_message_size;
 
         wave_acquire(rsrc->atomic_flags_, sub_buf_idx, active_lane_id); // Get exclusive access to the sub-buffer and associated data
         if (sizeof(wave_header_t) + data_size > sub_buffer_capacity) // Sanity check: does the message even fit in an empty sub-buffer?
