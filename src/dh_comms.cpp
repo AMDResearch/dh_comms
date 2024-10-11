@@ -28,6 +28,19 @@ namespace dh_comms
         zero((char *)buffer, size);
         return buffer;
     }
+        
+    void * dh_comms_mem_mgr::alloc_device_memory(std::size_t size)
+    {
+        void *result = NULL;
+        CHK_HIP_ERR(hipMalloc(&result, size));
+        return result;
+    }
+
+    void * dh_comms_mem_mgr::copy_to_device(void *dst, const void *src, std::size_t size)
+    {
+        CHK_HIP_ERR(hipMemcpy(dst, src, size, hipMemcpyHostToDevice));
+        return dst;
+    }
 
     void dh_comms_mem_mgr::free(void *ptr)
     {
@@ -71,11 +84,11 @@ namespace
     }*/
 
     template <typename T>
-    T *clone_to_device(const T &host_data)
+    T *clone_to_device(const T &host_data, dh_comms::dh_comms_mem_mgr& mgr)
     {
         T *device_data;
-        CHK_HIP_ERR(hipMalloc(&device_data, sizeof(T)));
-        CHK_HIP_ERR(hipMemcpy(device_data, &host_data, sizeof(T), hipMemcpyHostToDevice));
+        device_data = reinterpret_cast<T *>(mgr.alloc_device_memory(sizeof(T)));
+        mgr.copy_to_device(device_data, &host_data, sizeof(T));
         return device_data;
     }
 
@@ -106,7 +119,7 @@ namespace dh_comms
                        std::size_t no_host_threads, bool verbose, dh_comms_mem_mgr *mgr)
         : mgr_( mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
-          dev_rsrc_p_(clone_to_device(rsrc_.desc_)),
+          dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
           sub_buffer_processors_(init_host_threads(no_host_threads, message_processor.is_thread_safe())),
           message_processor_(message_processor),
           teardown_(false),
