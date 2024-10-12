@@ -2,6 +2,7 @@
 #include <vector>
 #include "memory_heatmap.h"
 #include "data_headers.h"
+#include "message.h"
 
 namespace dh_comms
 {

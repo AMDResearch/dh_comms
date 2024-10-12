@@ -10,6 +10,8 @@ message(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
 set(DH_COMMS_SOURCES
     src/dh_comms.cpp
     src/memory_heatmap.cpp
+    src/data_headers.cpp
+    src/message.cpp
 )
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})

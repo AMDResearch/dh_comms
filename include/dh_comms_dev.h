@@ -247,13 +247,13 @@ namespace dh_comms
     //! \brief Submit a vector message of any type that is valid in device code from the device to the host.
     //!
     //! Messages are submitted on a per-wave basis, and only the active lanes in the wave submit.
-    __device__ inline void v_submit_message(dh_comms_descriptor *rsrc, //!< Pointer to dh_comms device resources used for message submission.
-                                                                      //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
-                                                                      //!< and passed as a kernel argument to kernels that want to use v_submit_message().
-                                            const void *message,      //!< Pointer to message to be submitted.
-                                            size_t message_size,      //!< Size of the message in bytes
-                                            uint32_t src_loc_idx = 0, //!< Integer to identify the source code location from which v_submit_message() is called.
-                                            uint32_t user_type = 0)   //!< Tag to distinguish between different kinds of messages, used by host
+    __device__ inline void v_submit_message(dh_comms_descriptor *rsrc,          //!< Pointer to dh_comms device resources used for message submission.
+                                                                                //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
+                                                                                //!< and passed as a kernel argument to kernels that want to use v_submit_message().
+                                            const void *message,                //!< Pointer to message to be submitted.
+                                            size_t message_size,                //!< Size of the message in bytes
+                                            uint32_t src_loc_idx = 0xffffffff,  //!< Integer to identify the source code location from which v_submit_message() is called.
+                                            uint32_t user_type = 0xffffffff)    //!< Tag to distinguish between different kinds of messages, used by host
                                                                       //!< code that processes the messages.
     {
         bool is_vector_message = true;
@@ -271,8 +271,8 @@ namespace dh_comms
                                             size_t message_size = 0,          //!< Size of the message in bytes
                                             bool submit_lane_headers = false, //!< true if lane headers for active lanes (containing thread coordinates) are to
                                                                               //!< be submitted, false otherwise
-                                            uint32_t src_loc_idx = 0,         //!< Integer to identify the source code location from which v_submit_message() is called.
-                                            uint32_t user_type = 0)           //!< Tag to distinguish between different kinds of messages, used by host
+                                            uint32_t src_loc_idx = 0xffffffff,//!< Integer to identify the source code location from which v_submit_message() is called.
+                                            uint32_t user_type = 0xffffffff)  //!< Tag to distinguish between different kinds of messages, used by host
                                                                               //!< code that processes the messages.
     {
         bool is_vector_message = false;

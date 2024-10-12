@@ -63,6 +63,9 @@ namespace dh_comms
         __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
                                  uint64_t timestamp, uint32_t active_lane_count,
                                  uint32_t src_loc_idx, uint32_t user_type);
+
+        //! Wave header constructor; creates a wave header from raw bytes
+        wave_header_t(const char* wave_header_p);
     };
 
     //! \brief After the wave header, there's an optional lane header for each of the active lanes in the wavefront.
@@ -78,8 +81,11 @@ namespace dh_comms
         uint32_t thread_idx_z : 10;
         uint32_t unused : 2;
 
-        //! The lane header constructor fills the thread_idx_[x,y,z] fields.
+        //! The lane header default device constructor fills the thread_idx_[x,y,z] fields.
         __device__ lane_header_t();
+
+        //! Lane header constructor; creates a lane header from raw bytes
+        lane_header_t(const char* lane_header_p);
     };
 
 } // namespace dh_comms

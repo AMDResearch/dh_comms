@@ -16,7 +16,7 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
     {
         // scalar message without lane headers, single data item
         int meaning_of_life = 42;
-        dh_comms::s_submit_message(rsrc, &meaning_of_life, sizeof(int), false, __LINE__);
+        dh_comms::s_submit_message(rsrc, &meaning_of_life, sizeof(int), false, __LINE__, 1);
 
         return;
     }
@@ -25,7 +25,7 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
 
     // scalar message with lane headers, single data item
     size_t number_of_the_beast = 666;
-    dh_comms::s_submit_message(rsrc, &number_of_the_beast, sizeof(size_t), true, __LINE__);
+    dh_comms::s_submit_message(rsrc, &number_of_the_beast, sizeof(size_t), true, __LINE__, 2);
 
     dst[idx] = alpha * src[idx];
 
@@ -33,8 +33,8 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
     // source code line is passed as location index
     float *src_address = src + idx;
     float *dst_address = dst + idx;
-    dh_comms::v_submit_message(rsrc, &src_address, sizeof(float *), __LINE__);
-    dh_comms::v_submit_message(rsrc, &dst_address, sizeof(float *), __LINE__);
+    dh_comms::v_submit_message(rsrc, &src_address, sizeof(float *), __LINE__, 0);
+    dh_comms::v_submit_message(rsrc, &dst_address, sizeof(float *), __LINE__, 0);
 }
 
 void help(char **argv)
