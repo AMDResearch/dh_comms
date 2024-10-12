@@ -48,6 +48,11 @@ namespace dh_comms
         return;
     }
 
+    void dh_comms_mem_mgr::free_device_memory(void *ptr)
+    {
+        this->free(ptr);
+    }
+
     void * dh_comms_mem_mgr::copy(void *dst, void *src, std::size_t size)
     {
         memcpy(dst, src, size);
@@ -152,7 +157,7 @@ namespace dh_comms
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
         }
-        CHK_HIP_ERR(hipFree(dev_rsrc_p_));
+        mgr_->free_device_memory(dev_rsrc_p_);
     }
 
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()

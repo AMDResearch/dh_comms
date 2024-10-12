@@ -9,10 +9,14 @@ namespace dh_comms
     {
         uint64_t exec; //!< Execution mask of the wavefront submitting the message.
 
-        uint64_t data_size;             //!< \brief Size of the data following the wave header.
+        uint64_t data_size : 62;        //!< \brief Size of the data following the wave header.
                                         //!<
                                         //!< This is computed as: (number of active lanes) * (lane header (4 bytes) +
                                         //!< number of data bytes per lane), rounded up to nearest multiple of 4 bytes.
+        uint64_t is_vector_message : 1; //!< Indicates whether the message has one data item per lane (for vector messages),
+                                        //!< or a single data item for the whole wave (for scalar messages).
+        uint64_t has_lane_headers : 1;  //!< Indicates whether the message has lane headers (see lane_header_t) for the
+                                        //!< active lanes.
         uint64_t timestamp;             //!< GPU timestamp of the moment the message was submitted.
         uint32_t active_lane_count : 7; //!< number of active lanes in the wavefront, i.e., number of 1-bits in the execution mask
         uint32_t src_loc_idx : 25;      //!< Integer that can be used to uniquely identify the source code location from which
@@ -56,11 +60,12 @@ namespace dh_comms
 
         //! Wave header constructor; wave header members for which there is no corresponding
         //! constructor argument are detected and assigned by the constructor.
-        __device__ wave_header_t(uint64_t exec, uint64_t data_size, uint64_t timestamp, uint32_t active_lane_count,
+        __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
+                                 uint64_t timestamp, uint32_t active_lane_count,
                                  uint32_t src_loc_idx, uint32_t user_type);
     };
 
-    //! \brief After the wave header, there's a lane header for each of the active lanes in the wavefront.
+    //! \brief After the wave header, there's an optional lane header for each of the active lanes in the wavefront.
     //!
     //! The lane header contains the threadIdx.[x,y,z] values for the lane. Since the thread indices range from
     //! 0 to at most 1023 in each dimension, they can be packed into a 4-byte struct.
