@@ -12,10 +12,11 @@ namespace dh_comms
     class dh_comms_mem_mgr {
     public:
         dh_comms_mem_mgr();
-        ~dh_comms_mem_mgr();
+        virtual ~dh_comms_mem_mgr();
         virtual void * alloc(std::size_t size);
         virtual void * alloc_device_memory(std::size_t size);
         virtual void free(void *);
+        virtual void free_device_memory(void *);
         virtual void * copy(void *dst, void *src, std::size_t size);
         virtual void * copy_to_device(void *dst, const void *src, std::size_t size);
         virtual std::size_t zero(void *buffer, std::size_t size);
