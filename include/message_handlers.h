@@ -9,10 +9,10 @@ namespace dh_comms
     class message_handler_base
     {
     public:
-        message_handler_base();
+        message_handler_base(){};
         virtual ~message_handler_base() = 0;
         virtual bool handle(const message_t& message) = 0;
-        virtual void merge_state(message_handler_base&&){};
+        virtual void merge_state(message_handler_base&){};
     };
 
     class message_handlers_t {

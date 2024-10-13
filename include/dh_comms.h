@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "data_headers.h"
+#include "message_handlers.h"
 #include "message_processor_base.h"
 
 namespace dh_comms
@@ -88,6 +89,7 @@ namespace dh_comms
         dh_comms_descriptor *dev_rsrc_p_;
         std::vector<std::thread> sub_buffer_processors_;
         message_processor_base &message_processor_;
+        std::vector<message_handlers_t> message_handlers_;
         volatile bool teardown_;
         bool verbose_;
     };

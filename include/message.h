@@ -5,6 +5,12 @@
 
 namespace dh_comms
 {
+    enum class e_message: uint32_t
+    {
+        address = 0,
+        undefined = 0xffffffff
+    };
+
     struct message_t
     {
         wave_header_t wave_header;
