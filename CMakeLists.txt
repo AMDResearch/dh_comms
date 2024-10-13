@@ -12,6 +12,7 @@ set(DH_COMMS_SOURCES
     src/memory_heatmap.cpp
     src/data_headers.cpp
     src/message.cpp
+    src/message_handlers.cpp
 )
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
