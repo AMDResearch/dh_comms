@@ -3,6 +3,7 @@
 #include <vector>
 #include <thread>
 #include <functional>
+#include <chrono>
 
 #include "data_headers.h"
 #include "message_handlers.h"
@@ -90,7 +91,8 @@ namespace dh_comms
         std::vector<std::thread> sub_buffer_processors_;
         // message_processor_base &message_processor_;
         volatile bool teardown_;
-        bool verbose_;
+        const bool verbose_;
+        const std::chrono::time_point<std::chrono::steady_clock> start_time_;
     };
 
 } // namespace dh_comms

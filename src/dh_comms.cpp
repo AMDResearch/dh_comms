@@ -131,7 +131,8 @@ namespace dh_comms
           sub_buffer_processors_(init_host_threads(no_host_threads)),
           // message_processor_(message_processor),
           teardown_(false),
-          verbose_(verbose)
+          verbose_(verbose),
+          start_time_(std::chrono::steady_clock::now())
     {
         if (verbose_)
         {
@@ -157,6 +158,7 @@ namespace dh_comms
         {
             sbp.join();
         }
+        const auto stop_time = std::chrono::steady_clock::now();
         if (*rsrc_.desc_.error_bits_ & 1)
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
@@ -167,7 +169,9 @@ namespace dh_comms
         {
             bytes_processed += mh.bytes_processed();
         }
-        printf("bytes processed: %zu\n", bytes_processed);
+        const std::chrono::duration<double> processing_time = stop_time - start_time_;
+        double MiBps = bytes_processed / processing_time.count() / 1.0e6;
+        printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed, processing_time.count(), MiBps);
     }
 
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()
