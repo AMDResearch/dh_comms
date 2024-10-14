@@ -175,7 +175,7 @@ namespace dh_comms
         std::vector<message_handlers_t> message_handlers(no_host_threads);
         for (auto &mh : message_handlers)
         {
-            mh.add_handler(std::make_unique<memory_heatmap_v2_t>());
+            mh.add_handler(std::make_unique<memory_heatmap_t>());
         }
         return message_handlers;
     }
