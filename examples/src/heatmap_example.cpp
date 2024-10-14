@@ -31,10 +31,8 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
 
     // two vector messages with lane headers and a data item for every active lane.
     // source code line is passed as location index
-    float *src_address = src + idx;
-    float *dst_address = dst + idx;
-    dh_comms::v_submit_message(rsrc, &src_address, sizeof(float *), __LINE__, 0);
-    dh_comms::v_submit_message(rsrc, &dst_address, sizeof(float *), __LINE__, 0);
+    dh_comms::v_submit_address(rsrc, src + idx, __LINE__);
+    dh_comms::v_submit_address(rsrc, dst + idx, __LINE__);
 }
 
 void help(char **argv)

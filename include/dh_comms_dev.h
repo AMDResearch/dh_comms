@@ -286,4 +286,10 @@ namespace dh_comms
     {
         s_submit_message(rsrc);
     }
+
+
+    __device__ inline void v_submit_address(dh_comms_descriptor *rsrc, void* address, uint32_t src_loc_idx = 0xffffffff)
+    {
+            v_submit_message(rsrc, &address, sizeof(void *), src_loc_idx, 0);
+    }
 } // namespace dh_comms
