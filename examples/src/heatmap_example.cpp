@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     //    dh_comms configuration parameters
     size_t no_sub_buffers = 256; // gave best performance in several not too thorough tests
     size_t sub_buffer_capacity = 64 * 1024;
-    size_t no_host_threads = 2; // initial implementation of memory map processing is not thread-safe
+    size_t no_host_threads = 1; // initial implementation of memory map processing is not thread-safe
     //    memory heatmap configuration parameter
     size_t page_size = 1024 * 1024; // large page size to reduce output
     //    both dh_comms and heatmap configuration parameter
