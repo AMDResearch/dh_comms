@@ -6,7 +6,6 @@
 
 #include "data_headers.h"
 #include "message_handlers.h"
-#include "message_processor_base.h"
 
 namespace dh_comms
 {
@@ -79,6 +78,7 @@ namespace dh_comms
 
     private:
         void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
+        std::vector<message_handlers_t> init_message_handlers(std::size_t no_host_threads);
         std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:

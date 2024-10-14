@@ -127,7 +127,7 @@ namespace dh_comms
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
-          message_handlers_(no_host_threads),
+          message_handlers_(init_message_handlers(no_host_threads)),
           sub_buffer_processors_(init_host_threads(no_host_threads)),
           // message_processor_(message_processor),
           teardown_(false),
@@ -145,10 +145,7 @@ namespace dh_comms
                 printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                        __FILE__, __LINE__);
             }
-        }
-        for(auto& mh: message_handlers_)
-        {
-            mh.add_handler(std::make_unique<memory_heatmap_v2_t>());
+            printf("using %zu message handler sets\n", message_handlers_.size());
         }
     }
 
@@ -170,6 +167,17 @@ namespace dh_comms
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()
     {
         return dev_rsrc_p_;
+    }
+
+    std::vector<message_handlers_t> dh_comms::init_message_handlers(std::size_t no_host_threads)
+    {
+        assert(no_host_threads != 0);
+        std::vector<message_handlers_t> message_handlers(no_host_threads);
+        for (auto &mh : message_handlers)
+        {
+            mh.add_handler(std::make_unique<memory_heatmap_v2_t>());
+        }
+        return message_handlers;
     }
 
     std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
@@ -215,7 +223,6 @@ namespace dh_comms
                     char *message_p = &rsrc_.desc_.buffer_[byte_offset];
                     while (size != 0)
                     {
-                        // size = message_processor_(message_p, size, i);
                         message_t message(message_p);
                         message_handlers_[thread_no].handle(message);
                         assert(message.size() <= size);
@@ -232,7 +239,6 @@ namespace dh_comms
         }
 
         // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
-
         for (size_t i = first; i != last; ++i)
         {
             uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
@@ -246,7 +252,6 @@ namespace dh_comms
             char *message_p = &rsrc_.desc_.buffer_[byte_offset];
             while (size != 0)
             {
-                // size = message_processor_(message_p, size, i);
                 message_t message(message_p);
                 message_handlers_[thread_no].handle(message);
                 assert(message.size() <= size);

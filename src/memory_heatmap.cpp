@@ -149,14 +149,14 @@ namespace dh_comms
 
     bool memory_heatmap_v2_t::handle(const message_t &message)
     {
-        if((e_message)message.wave_header.user_type != e_message::address)
+        if ((e_message)message.wave_header.user_type != e_message::address)
         {
             return false;
         }
-        for(const auto& charv: message.data)
+        for (const auto &charv : message.data)
         {
             assert(charv.size() == 8);
-            uint64_t address = *(uint64_t*)charv.data();
+            uint64_t address = *(uint64_t *)charv.data();
             // map address to lowest address in page and update page count
             address /= page_size_;
             address *= page_size_;
@@ -177,7 +177,6 @@ namespace dh_comms
         return;
     }
 
-
     void memory_heatmap_v2_t::show() const
     {
         printf("memory heatmap: page size = %lu\n", page_size_);
@@ -187,6 +186,5 @@ namespace dh_comms
             printf("page [%016lx:%016lx] %12lu accesses\n", first_page_address, last_page_address, count);
         }
     }
-
 
 } // namespace dh_comms
