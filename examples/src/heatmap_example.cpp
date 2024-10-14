@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     //    dh_comms configuration parameters
     size_t no_sub_buffers = 256; // gave best performance in several not too thorough tests
     size_t sub_buffer_capacity = 64 * 1024;
-    size_t no_host_threads = 1; // initial implementation of memory map processing is not thread-safe
+    size_t no_host_threads = 2; // initial implementation of memory map processing is not thread-safe
     //    memory heatmap configuration parameter
     size_t page_size = 1024 * 1024; // large page size to reduce output
     //    both dh_comms and heatmap configuration parameter
@@ -149,13 +149,11 @@ int main(int argc, char **argv)
     CHK_HIP_ERR(hipMalloc(&src, array_size * sizeof(float)));
     CHK_HIP_ERR(hipMalloc(&dst, array_size * sizeof(float)));
 
-    dh_comms::memory_heatmap_t memory_heatmap(page_size, verbose);
-
     hipEvent_t start, stop;
     CHK_HIP_ERR(hipEventCreate(&start));
     CHK_HIP_ERR(hipEventCreate(&stop));
     {
-        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, memory_heatmap, no_host_threads, verbose);
+        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, no_host_threads, verbose);
         CHK_HIP_ERR(hipDeviceSynchronize());
         CHK_HIP_ERR(hipEventRecord(start));
         // if dh_comms sub-buffers get full during running of the kernel,
@@ -172,11 +170,8 @@ int main(int argc, char **argv)
     float ms;
     CHK_HIP_ERR(hipEventElapsedTime(&ms, start, stop));
     float mbps = (float)data_size / ms / 1000;
-    printf("processed %lu bytes in %f ms: %.0f MiB/s\n", data_size, ms, mbps);
+    printf("\nprocessed %lu bytes in %f ms: %.0f MiB/s\n", data_size, ms, mbps);
 
     CHK_HIP_ERR(hipFree(src));
     CHK_HIP_ERR(hipFree(dst));
-
-    printf("\n");
-    memory_heatmap.show();
 }

@@ -23,7 +23,7 @@ namespace dh_comms
     class memory_heatmap_v2_t : public message_handler_base
     {
     public:
-        memory_heatmap_v2_t(size_t page_size = 4096, bool verbose = false);
+        memory_heatmap_v2_t(size_t page_size = 1024 * 1024, bool verbose = false);
         virtual ~memory_heatmap_v2_t();
         virtual bool handle(const message_t &message) override;
         virtual void merge_state(message_handler_base &other) override;

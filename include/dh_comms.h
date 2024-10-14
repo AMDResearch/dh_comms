@@ -63,7 +63,7 @@ namespace dh_comms
     public:
         dh_comms(std::size_t no_sub_buffers,                //!< Number of sub-buffers into which the main data buffer is partitioned.
                  std::size_t sub_buffer_capacity,           //!< The maximum number of bytes each of the sub-buffers can hold.
-                 message_processor_base &message_processor, //!<  Pointer to derived class of message_processor_base, responsible
+                 // message_processor_base &message_processor, //!<  Pointer to derived class of message_processor_base, responsible
                                                             //!< for processing messages by host code. Since dh_comms users can submit any type of
                                                             //!< message from device code to the host, interpretation of the data on the host
                                                             //!< side is the responsibility of user code too.
@@ -78,18 +78,17 @@ namespace dh_comms
         dh_comms_descriptor *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
     private:
-        void process_sub_buffers(std::size_t first, std::size_t last);
-        std::vector<std::thread> init_host_threads(std::size_t no_host_threads,
-                                                   bool message_processor_is_thread_safe);
+        void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
+        std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:
         dh_comms_mem_mgr default_mgr_;
         dh_comms_mem_mgr * mgr_;
         dh_comms_resources rsrc_;
         dh_comms_descriptor *dev_rsrc_p_;
-        std::vector<std::thread> sub_buffer_processors_;
-        message_processor_base &message_processor_;
         std::vector<message_handlers_t> message_handlers_;
+        std::vector<std::thread> sub_buffer_processors_;
+        // message_processor_base &message_processor_;
         volatile bool teardown_;
         bool verbose_;
     };

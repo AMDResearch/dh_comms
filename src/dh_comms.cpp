@@ -8,6 +8,8 @@
 
 #include "dh_comms.h"
 #include "data_headers.h"
+#include "message.h"
+#include "memory_heatmap.h"
 
 namespace dh_comms
 {
@@ -21,22 +23,22 @@ namespace dh_comms
     {
     }
 
-    void * dh_comms_mem_mgr::alloc(std::size_t size)
+    void *dh_comms_mem_mgr::alloc(std::size_t size)
     {
         void *buffer;
         CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
         zero((char *)buffer, size);
         return buffer;
     }
-        
-    void * dh_comms_mem_mgr::alloc_device_memory(std::size_t size)
+
+    void *dh_comms_mem_mgr::alloc_device_memory(std::size_t size)
     {
         void *result = NULL;
         CHK_HIP_ERR(hipMalloc(&result, size));
         return result;
     }
 
-    void * dh_comms_mem_mgr::copy_to_device(void *dst, const void *src, std::size_t size)
+    void *dh_comms_mem_mgr::copy_to_device(void *dst, const void *src, std::size_t size)
     {
         CHK_HIP_ERR(hipMemcpy(dst, src, size, hipMemcpyHostToDevice));
         return dst;
@@ -53,7 +55,7 @@ namespace dh_comms
         this->free(ptr);
     }
 
-    void * dh_comms_mem_mgr::copy(void *dst, void *src, std::size_t size)
+    void *dh_comms_mem_mgr::copy(void *dst, void *src, std::size_t size)
     {
         memcpy(dst, src, size);
         return dst;
@@ -70,7 +72,7 @@ namespace dh_comms
 namespace
 {
     constexpr bool shared_buffers_are_host_pinned = true;
-    
+
     /*void *allocate_shared_buffer(size_t size)
     {
         void *buffer;
@@ -89,7 +91,7 @@ namespace
     }*/
 
     template <typename T>
-    T *clone_to_device(const T &host_data, dh_comms::dh_comms_mem_mgr& mgr)
+    T *clone_to_device(const T &host_data, dh_comms::dh_comms_mem_mgr &mgr)
     {
         T *device_data;
         device_data = reinterpret_cast<T *>(mgr.alloc_device_memory(sizeof(T)));
@@ -101,12 +103,12 @@ namespace
 
 namespace dh_comms
 {
-    dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, dh_comms_mem_mgr& mgr)
-        : desc_({no_sub_buffers, sub_buffer_capacity, 
-            (decltype(desc_.buffer_))mgr.alloc(no_sub_buffers * sub_buffer_capacity),
-            (decltype(desc_.sub_buffer_sizes_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.sub_buffer_sizes_))),
-            (decltype(desc_.error_bits_))mgr.alloc(sizeof(decltype(*desc_.error_bits_))),
-            (decltype(desc_.atomic_flags_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_)))}),
+    dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, dh_comms_mem_mgr &mgr)
+        : desc_({no_sub_buffers, sub_buffer_capacity,
+                 (decltype(desc_.buffer_))mgr.alloc(no_sub_buffers * sub_buffer_capacity),
+                 (decltype(desc_.sub_buffer_sizes_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.sub_buffer_sizes_))),
+                 (decltype(desc_.error_bits_))mgr.alloc(sizeof(decltype(*desc_.error_bits_))),
+                 (decltype(desc_.atomic_flags_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_)))}),
           mgr_(mgr)
     {
     }
@@ -120,13 +122,14 @@ namespace dh_comms
     }
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                       message_processor_base &message_processor,
+                       /* message_processor_base &message_processor, */
                        std::size_t no_host_threads, bool verbose, dh_comms_mem_mgr *mgr)
-        : mgr_( mgr ? mgr : &default_mgr_),
+        : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
-          sub_buffer_processors_(init_host_threads(no_host_threads, message_processor.is_thread_safe())),
-          message_processor_(message_processor),
+          message_handlers_(no_host_threads),
+          sub_buffer_processors_(init_host_threads(no_host_threads)),
+          // message_processor_(message_processor),
           teardown_(false),
           verbose_(verbose)
     {
@@ -142,6 +145,10 @@ namespace dh_comms
                 printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                        __FILE__, __LINE__);
             }
+        }
+        for(auto& mh: message_handlers_)
+        {
+            mh.add_handler(std::make_unique<memory_heatmap_v2_t>());
         }
     }
 
@@ -165,15 +172,9 @@ namespace dh_comms
         return dev_rsrc_p_;
     }
 
-    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads,
-                                                         bool message_processor_is_thread_safe)
+    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
     {
         assert(no_host_threads != 0);
-        if (no_host_threads > 1 and not message_processor_is_thread_safe)
-        {
-            printf("Thread-safe message processor required for multi-threaded host processing; exiting\n");
-            exit(EXIT_FAILURE);
-        }
         std::size_t no_sub_buffers_per_thread = rsrc_.desc_.no_sub_buffers_ / no_host_threads;
         std::size_t remainder = rsrc_.desc_.no_sub_buffers_ % no_host_threads;
 
@@ -187,7 +188,7 @@ namespace dh_comms
             {
                 ++last;
             }
-            sub_buffer_processors.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, first, last));
+            sub_buffer_processors.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, i, first, last));
             first = last;
         }
         assert(last == rsrc_.desc_.no_sub_buffers_);
@@ -195,7 +196,7 @@ namespace dh_comms
         return sub_buffer_processors;
     }
 
-    void dh_comms::process_sub_buffers(std::size_t first, std::size_t last)
+    void dh_comms::process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last)
     {
         while (not teardown_)
         {
@@ -214,7 +215,12 @@ namespace dh_comms
                     char *message_p = &rsrc_.desc_.buffer_[byte_offset];
                     while (size != 0)
                     {
-                        size = message_processor_(message_p, size, i);
+                        // size = message_processor_(message_p, size, i);
+                        message_t message(message_p);
+                        message_handlers_[thread_no].handle(message);
+                        assert(message.size() <= size);
+                        size -= message.size();
+                        message_p += message.size();
                     }
 
                     rsrc_.desc_.sub_buffer_sizes_[i] = 0;
@@ -240,7 +246,12 @@ namespace dh_comms
             char *message_p = &rsrc_.desc_.buffer_[byte_offset];
             while (size != 0)
             {
-                size = message_processor_(message_p, size, i);
+                // size = message_processor_(message_p, size, i);
+                message_t message(message_p);
+                message_handlers_[thread_no].handle(message);
+                assert(message.size() <= size);
+                size -= message.size();
+                message_p += message.size();
             }
         }
     }
