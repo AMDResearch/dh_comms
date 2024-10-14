@@ -139,23 +139,13 @@ int main(int argc, char **argv)
                 page_size, verbose);
 
     const int no_blocks = (array_size + blocksize - 1) / blocksize;
-    constexpr size_t messages_per_wave = 2;
-    const size_t waves_per_block = (blocksize + 63) / 64;
-    const size_t data_size = no_blocks * (messages_per_wave * waves_per_block * sizeof(dh_comms::wave_header_t) +
-                                          messages_per_wave * blocksize *
-                                              (sizeof(dh_comms::lane_header_t) + sizeof(float *)));
 
     float *src, *dst;
     CHK_HIP_ERR(hipMalloc(&src, array_size * sizeof(float)));
     CHK_HIP_ERR(hipMalloc(&dst, array_size * sizeof(float)));
 
-    hipEvent_t start, stop;
-    CHK_HIP_ERR(hipEventCreate(&start));
-    CHK_HIP_ERR(hipEventCreate(&stop));
     {
         dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, no_host_threads, verbose);
-        CHK_HIP_ERR(hipDeviceSynchronize());
-        CHK_HIP_ERR(hipEventRecord(start));
         // if dh_comms sub-buffers get full during running of the kernel,
         // device code notifies host code to process the full buffers and
         // clear them
@@ -165,12 +155,6 @@ int main(int argc, char **argv)
         // to finish, and then processes any remaining data in the
         // sub-buffers
     }
-    CHK_HIP_ERR(hipEventRecord(stop));
-    CHK_HIP_ERR(hipEventSynchronize(stop));
-    float ms;
-    CHK_HIP_ERR(hipEventElapsedTime(&ms, start, stop));
-    float mbps = (float)data_size / ms / 1000;
-    printf("\nprocessed %lu bytes in %f ms: %.0f MiB/s\n", data_size, ms, mbps);
 
     CHK_HIP_ERR(hipFree(src));
     CHK_HIP_ERR(hipFree(dst));

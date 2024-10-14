@@ -162,6 +162,12 @@ namespace dh_comms
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
         }
         mgr_->free_device_memory(dev_rsrc_p_);
+        size_t bytes_processed = 0;
+        for(const auto& mh: message_handlers_)
+        {
+            bytes_processed += mh.bytes_processed();
+        }
+        printf("bytes processed: %zu\n", bytes_processed);
     }
 
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()

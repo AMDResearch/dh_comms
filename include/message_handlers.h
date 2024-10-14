@@ -17,15 +17,17 @@ namespace dh_comms
 
     class message_handlers_t {
     public:
-        message_handlers_t(){};
+        message_handlers_t();
         ~message_handlers_t() = default;
         message_handlers_t(const message_handlers_t&) = delete;
         message_handlers_t& operator=(const message_handlers_t&) = delete;
 
         bool handle(const message_t& message);
         void add_handler(std::unique_ptr<message_handler_base>&& message_handler);
+        size_t bytes_processed() const;
 
     private:
-        std::vector<std::unique_ptr<message_handler_base>> message_handlers;
+        std::vector<std::unique_ptr<message_handler_base>> message_handlers_;
+        size_t bytes_processed_;
     };
 } // namespace dh_comms
