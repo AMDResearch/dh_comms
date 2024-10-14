@@ -1,4 +1,5 @@
 #include "message_handlers.h"
+#include <cassert>
 
 namespace dh_comms
 {
@@ -29,6 +30,15 @@ namespace dh_comms
     void message_handlers_t::add_handler(std::unique_ptr<message_handler_base> &&message_handler)
     {
         message_handlers_.push_back(std::move(message_handler));
+    }
+
+    void message_handlers_t::merge_handler_states(message_handlers_t &other)
+    {
+        assert(message_handlers_.size() == other.message_handlers_.size());
+        for (size_t i = 0; i < message_handlers_.size(); ++i)
+        {
+            message_handlers_[i]->merge_state(*other.message_handlers_[i]);
+        }
     }
 
 } // namespace dh_comms

@@ -53,7 +53,10 @@ namespace dh_comms
 
     void memory_heatmap_t::show() const
     {
-        printf("memory heatmap: page size = %lu\n", page_size_);
+        if(page_counts_.size() != 0)
+        {
+            printf("memory heatmap: page size = %lu\n", page_size_);
+        }
         for (const auto &[first_page_address, count] : page_counts_)
         {
             auto last_page_address = first_page_address + page_size_ - 1;

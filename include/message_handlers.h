@@ -23,8 +23,9 @@ namespace dh_comms
         message_handlers_t& operator=(const message_handlers_t&) = delete;
 
         bool handle(const message_t& message);
-        void add_handler(std::unique_ptr<message_handler_base>&& message_handler);
         size_t bytes_processed() const;
+        void add_handler(std::unique_ptr<message_handler_base>&& message_handler);
+        void merge_handler_states(message_handlers_t& other);
 
     private:
         std::vector<std::unique_ptr<message_handler_base>> message_handlers_;

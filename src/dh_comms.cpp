@@ -73,23 +73,6 @@ namespace
 {
     constexpr bool shared_buffers_are_host_pinned = true;
 
-    /*void *allocate_shared_buffer(size_t size)
-    {
-        void *buffer;
-        std::vector<char> zeros(size);
-        if constexpr (shared_buffers_are_host_pinned)
-        {
-            CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
-            std::copy(zeros.cbegin(), zeros.cend(), (char *)buffer);
-        }
-        else
-        {
-            CHK_HIP_ERR(hipExtMallocWithFlags(&buffer, size, hipDeviceMallocFinegrained));
-            CHK_HIP_ERR(hipMemcpy(buffer, zeros.data(), size, hipMemcpyHostToDevice));
-        }
-        return buffer;
-    }*/
-
     template <typename T>
     T *clone_to_device(const T &host_data, dh_comms::dh_comms_mem_mgr &mgr)
     {
@@ -159,6 +142,10 @@ namespace dh_comms
             sbp.join();
         }
         const auto stop_time = std::chrono::steady_clock::now();
+        for(size_t i = 1; i < message_handlers_.size(); ++i)
+        {
+            message_handlers_[0].merge_handler_states(message_handlers_[i]);
+        }
         if (*rsrc_.desc_.error_bits_ & 1)
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
