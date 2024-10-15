@@ -14,6 +14,9 @@ namespace dh_comms
         virtual void merge_state(message_handler_base &other) override;
         void show() const;
 
+    protected:
+        virtual memory_heatmap_t* clone_impl() const override { return new memory_heatmap_t(*this); }
+
     private:
         bool verbose_;
         size_t page_size_;

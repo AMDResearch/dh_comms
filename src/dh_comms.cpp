@@ -105,14 +105,12 @@ namespace dh_comms
     }
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                       /* message_processor_base &message_processor, */
                        std::size_t no_host_threads, bool verbose, dh_comms_mem_mgr *mgr)
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
           message_handlers_(init_message_handlers(no_host_threads)),
           sub_buffer_processors_(init_host_threads(no_host_threads)),
-          // message_processor_(message_processor),
           teardown_(false),
           verbose_(verbose),
           start_time_(std::chrono::steady_clock::now())
