@@ -23,14 +23,14 @@ namespace dh_comms
 
     bool memory_heatmap_t::handle(const message_t &message)
     {
-        if ((e_message)message.wave_header.user_type != e_message::address)
+        if ((message_type)message.wave_header().user_type != message_type::address)
         {
             return false;
         }
-        for (const auto &charv : message.data)
+        assert(message.data_item_size() == 8);
+        for (size_t i = 0; i != message.no_data_items(); ++i)
         {
-            assert(charv.size() == 8);
-            uint64_t address = *(uint64_t *)charv.data();
+            uint64_t address = *(const uint64_t*)message.data_item(i);
             // map address to lowest address in page and update page count
             address /= page_size_;
             address *= page_size_;

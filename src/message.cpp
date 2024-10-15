@@ -42,14 +42,14 @@ namespace
 namespace dh_comms
 {
     message_t::message_t(const char *message_p)
-        : wave_header(message_p),
-          lane_headers(init_lane_headers(message_p, wave_header)),
-          data(init_data(message_p, wave_header))
+        : wave_header_(message_p),
+          lane_headers_(init_lane_headers(message_p, wave_header_)),
+          data_(init_data(message_p, wave_header_))
     {
     }
 
     size_t message_t::size() const
     {
-        return sizeof(wave_header_t) + wave_header.data_size;
+        return sizeof(wave_header_t) + wave_header_.data_size;
     }
 }
