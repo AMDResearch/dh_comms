@@ -165,7 +165,7 @@ namespace dh_comms
         }
         mgr_->free_device_memory(dev_rsrc_p_);
         size_t bytes_processed = 0;
-        for(const auto& mh: message_handlers_)
+        for (const auto &mh : message_handlers_)
         {
             bytes_processed += mh.bytes_processed();
         }
@@ -216,7 +216,7 @@ namespace dh_comms
 
     void dh_comms::process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last)
     {
-        while (not teardown_)
+        while (__atomic_load_n(&teardown_, __ATOMIC_ACQUIRE) == false)
         {
             for (size_t i = first; i != last; ++i)
             {
