@@ -79,7 +79,7 @@ namespace dh_comms
 
     private:
         void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
-        std::vector<message_handlers_t> init_message_handlers(std::size_t no_host_threads);
+        std::vector<message_handler_chain_t> init_message_handler_chains(std::size_t no_host_threads);
         std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:
@@ -87,7 +87,7 @@ namespace dh_comms
         dh_comms_mem_mgr * mgr_;
         dh_comms_resources rsrc_;
         dh_comms_descriptor *dev_rsrc_p_;
-        std::vector<message_handlers_t> message_handlers_;
+        std::vector<message_handler_chain_t> message_handler_chains_;
         std::vector<std::thread> sub_buffer_processors_;
         // message_processor_base &message_processor_;
         volatile bool teardown_;

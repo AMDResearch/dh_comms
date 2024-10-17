@@ -109,7 +109,7 @@ namespace dh_comms
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
-          message_handlers_(init_message_handlers(no_host_threads)),
+          message_handler_chains_(init_message_handler_chains(no_host_threads)),
           sub_buffer_processors_(init_host_threads(no_host_threads)),
           teardown_(false),
           verbose_(verbose),
@@ -127,7 +127,9 @@ namespace dh_comms
                 printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                        __FILE__, __LINE__);
             }
-            printf("using %zu message handler sets\n", message_handlers_.size());
+            printf("using %zu message handler chains with %zu handlers each\n",
+                message_handler_chains_.size(),
+                message_handler_chains_.size() == 0 ? 0 : message_handler_chains_[0].size());
         }
     }
 
@@ -140,9 +142,9 @@ namespace dh_comms
             sbp.join();
         }
         const auto stop_time = std::chrono::steady_clock::now();
-        for(size_t i = 1; i < message_handlers_.size(); ++i)
+        for(size_t i = 1; i < message_handler_chains_.size(); ++i)
         {
-            message_handlers_[0].merge_handler_states(message_handlers_[i]);
+            message_handler_chains_[0].merge_handler_states(message_handler_chains_[i]);
         }
         if (*rsrc_.desc_.error_bits_ & 1)
         {
@@ -150,9 +152,9 @@ namespace dh_comms
         }
         mgr_->free_device_memory(dev_rsrc_p_);
         size_t bytes_processed = 0;
-        for (const auto &mh : message_handlers_)
+        for (const auto &mhc : message_handler_chains_)
         {
-            bytes_processed += mh.bytes_processed();
+            bytes_processed += mhc.bytes_processed();
         }
         const std::chrono::duration<double> processing_time = stop_time - start_time_;
         double MiBps = bytes_processed / processing_time.count() / 1.0e6;
@@ -164,15 +166,15 @@ namespace dh_comms
         return dev_rsrc_p_;
     }
 
-    std::vector<message_handlers_t> dh_comms::init_message_handlers(std::size_t no_host_threads)
+    std::vector<message_handler_chain_t> dh_comms::init_message_handler_chains(std::size_t no_host_threads)
     {
         assert(no_host_threads != 0);
-        std::vector<message_handlers_t> message_handlers(no_host_threads);
-        for (auto &mh : message_handlers)
+        std::vector<message_handler_chain_t> message_handler_chains(no_host_threads);
+        for (auto &mhc : message_handler_chains)
         {
-            mh.add_handler(std::make_unique<memory_heatmap_t>());
+            mhc.add_handler(std::make_unique<memory_heatmap_t>());
         }
-        return message_handlers;
+        return message_handler_chains;
     }
 
     std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
@@ -219,7 +221,7 @@ namespace dh_comms
                     while (size != 0)
                     {
                         message_t message(message_p);
-                        message_handlers_[thread_no].handle(message);
+                        message_handler_chains_[thread_no].handle(message);
                         assert(message.size() <= size);
                         size -= message.size();
                         message_p += message.size();
@@ -248,7 +250,7 @@ namespace dh_comms
             while (size != 0)
             {
                 message_t message(message_p);
-                message_handlers_[thread_no].handle(message);
+                message_handler_chains_[thread_no].handle(message);
                 assert(message.size() <= size);
                 size -= message.size();
                 message_p += message.size();
