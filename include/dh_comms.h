@@ -81,6 +81,10 @@ namespace dh_comms
         void stop();                                         //! Stop message processing on the host. It is the responsibility
                                                              //! of calling code to make sure kernels have finished by e.g. issuing
                                                              //! a hipDeviceSyncronize() or other synchronization call.
+        void clear_handler_states();
+        void merge_handler_states();
+        void report(bool auto_merge = true,
+                    bool auto_clear = true);
 
     private:
         void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);

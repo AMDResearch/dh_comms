@@ -36,6 +36,22 @@ namespace dh_comms
         message_handlers_.push_back(std::move(message_handler));
     }
 
+    void message_handler_chain_t::report()
+    {
+        for(auto& mh: message_handlers_)
+        {
+            mh->report();
+        }
+    }
+
+    void message_handler_chain_t::clear_handler_states()
+    {
+        for(auto& mh: message_handlers_)
+        {
+            mh->clear();
+        }
+    }
+
     void message_handler_chain_t::merge_handler_states(message_handler_chain_t &other)
     {
         assert(message_handlers_.size() == other.message_handlers_.size());

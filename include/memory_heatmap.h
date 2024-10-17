@@ -9,10 +9,11 @@ namespace dh_comms
     {
     public:
         memory_heatmap_t(size_t page_size = 1024 * 1024, bool verbose = false);
-        virtual ~memory_heatmap_t();
+        virtual ~memory_heatmap_t(){};
         virtual bool handle(const message_t &message) override;
         virtual void merge_state(message_handler_base &other) override;
-        void show() const;
+        virtual void report() override;
+        virtual void clear() override;
 
     protected:
         virtual memory_heatmap_t* clone_impl() const override { return new memory_heatmap_t(*this); }

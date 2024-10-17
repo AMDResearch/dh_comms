@@ -38,6 +38,16 @@ namespace dh_comms
         //! merge_state in the derived class isn't necessary, and the derived class just inherits the
         //! base class implementation, which does nothing.
         virtual void merge_state(message_handler_base&){};
+        //! Message handlers that aggregate data during message processing may want to report
+        //! the data when done. They may do so by overriding this function. Not all message handlers
+        //! may need to report data in the end, e.g., message handlers that just save messages to disk
+        //! on the fly as they are processed. These handlers do not need override this function, but just
+        //! rely on the implementation of this function by the base class, which does nothing.
+        virtual void report(){}
+        //! Stateful message handlers must implement the clear function by clearing their state,
+        //! so that they can be reused for a new data processing run. Stateless message handlers
+        //! don't need to override this function, but can inherit the base class implementation.
+        virtual void clear(){};
         //! Message handlers are implemented as classes derived from the abstract base class
         //! message_handler_base. The classes that manage the message handlers only use (smart) pointers
         //! to message_handler_base, but they need to be able to copy message handlers. We use the
@@ -62,6 +72,8 @@ namespace dh_comms
         bool handle(const message_t& message);
         size_t bytes_processed() const;
         void add_handler(std::unique_ptr<message_handler_base>&& message_handler);
+        void report();
+        void clear_handler_states();
         void merge_handler_states(message_handler_chain_t& other);
 
     private:

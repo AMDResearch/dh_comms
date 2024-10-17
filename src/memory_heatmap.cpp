@@ -16,11 +16,6 @@ namespace dh_comms
         (void)page_size_;
     }
 
-    memory_heatmap_t::~memory_heatmap_t()
-    {
-        show();
-    }
-
     bool memory_heatmap_t::handle(const message_t &message)
     {
         if ((message_type)message.wave_header().user_type != message_type::address)
@@ -47,11 +42,11 @@ namespace dh_comms
             page_counts_[page] += count;
         }
 
-        other_mh.page_counts_.clear();
+        other_mh.clear();
         return;
     }
 
-    void memory_heatmap_t::show() const
+    void memory_heatmap_t::report()
     {
         if(page_counts_.size() != 0)
         {
@@ -62,6 +57,11 @@ namespace dh_comms
             auto last_page_address = first_page_address + page_size_ - 1;
             printf("page [%016lx:%016lx] %12lu accesses\n", first_page_address, last_page_address, count);
         }
+    }
+
+    void memory_heatmap_t::clear()
+    {
+        page_counts_.clear();
     }
 
 } // namespace dh_comms

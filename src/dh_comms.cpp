@@ -138,14 +138,13 @@ namespace dh_comms
 
     dh_comms::~dh_comms()
     {
-        if(running_)
+        if (running_)
         {
+            // if processing threads are still running, stop/join them, to avoid the program
+            // to hang.
             stop();
         }
-        for (size_t i = 1; i < message_handler_chains_.size(); ++i)
-        {
-            message_handler_chains_[0].merge_handler_states(message_handler_chains_[i]);
-        }
+        merge_handler_states();
         if (*rsrc_.desc_.error_bits_ & 1)
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
@@ -168,8 +167,8 @@ namespace dh_comms
 
     void dh_comms::start()
     {
-        assert(sub_buffer_processors_.empty());
         assert(not running_);
+        assert(sub_buffer_processors_.empty());
         running_ = true;
         start_time_ = std::chrono::steady_clock::now();
         std::size_t no_sub_buffers_per_thread = rsrc_.desc_.no_sub_buffers_ / no_host_threads_;
@@ -192,12 +191,47 @@ namespace dh_comms
 
     void dh_comms::stop()
     {
+        assert(running_);
         running_ = false;
         for (auto &sbp : sub_buffer_processors_)
         {
             sbp.join();
         }
         stop_time_ = std::chrono::steady_clock::now();
+        sub_buffer_processors_.clear();
+    }
+
+    void dh_comms::clear_handler_states()
+    {
+        assert(not running_);
+        for(auto& mhc: message_handler_chains_)
+        {
+            mhc.clear_handler_states();
+        }
+    }
+
+    void dh_comms::merge_handler_states()
+    {
+        assert(not running_);
+        for (size_t i = 1; i < message_handler_chains_.size(); ++i)
+        {
+            message_handler_chains_[0].merge_handler_states(message_handler_chains_[i]);
+        }
+    }
+
+    void dh_comms::report(bool auto_merge, bool auto_clear)
+    {
+        assert(not running_);
+        if(auto_merge){
+            merge_handler_states();
+        }
+        for(auto& mhc: message_handler_chains_)
+        {
+            mhc.report();
+        }
+        if(auto_clear){
+            clear_handler_states();
+        }
     }
 
     std::vector<message_handler_chain_t> dh_comms::init_message_handler_chains(std::size_t no_host_threads)

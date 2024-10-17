@@ -151,6 +151,7 @@ int main(int argc, char **argv)
         test<<<no_blocks, blocksize>>>(dst, src, 3.14, array_size, dh_comms.get_dev_rsrc_ptr());
         CHK_HIP_ERR(hipDeviceSynchronize());
         dh_comms.stop();
+        dh_comms.report();
     }
 
     CHK_HIP_ERR(hipFree(src));
