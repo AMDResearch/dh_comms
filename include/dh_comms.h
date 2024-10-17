@@ -63,13 +63,10 @@ namespace dh_comms
     public:
         dh_comms(std::size_t no_sub_buffers,                //!< Number of sub-buffers into which the main data buffer is partitioned.
                  std::size_t sub_buffer_capacity,           //!< The maximum number of bytes each of the sub-buffers can hold.
-                 // message_processor_base &message_processor, //!<  Pointer to derived class of message_processor_base, responsible
-                                                            //!< for processing messages by host code. Since dh_comms users can submit any type of
-                                                            //!< message from device code to the host, interpretation of the data on the host
-                                                            //!< side is the responsibility of user code too.
                  std::size_t no_host_threads = 1,           //!< Controls how many threads host code uses to process messages in the
                                                             //!< sub-buffers.
                  bool verbose = false,                       //!< Controls how chatty the code is.
+                 bool install_default_handlers = false,
                  dh_comms_mem_mgr *mgr = NULL
                  );
         ~dh_comms();
@@ -81,6 +78,7 @@ namespace dh_comms
         void stop();                                         //! Stop message processing on the host. It is the responsibility
                                                              //! of calling code to make sure kernels have finished by e.g. issuing
                                                              //! a hipDeviceSyncronize() or other synchronization call.
+        void append_handler(const message_handler_base& handler);
         void clear_handler_states();
         void merge_handler_states();
         void report(bool auto_merge = true,
@@ -88,7 +86,7 @@ namespace dh_comms
 
     private:
         void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
-        std::vector<message_handler_chain_t> init_message_handler_chains(std::size_t no_host_threads);
+        void install_default_message_handler_chains();
 
     private:
         dh_comms_mem_mgr default_mgr_;
@@ -96,11 +94,11 @@ namespace dh_comms
         dh_comms_resources rsrc_;
         dh_comms_descriptor *dev_rsrc_p_;
         std::size_t no_host_threads_;
+        volatile bool running_;
+        const bool verbose_;
         std::vector<message_handler_chain_t> message_handler_chains_;
         std::vector<std::thread> sub_buffer_processors_;
         // message_processor_base &message_processor_;
-        volatile bool running_;
-        const bool verbose_;
         std::chrono::time_point<std::chrono::steady_clock> start_time_;
         std::chrono::time_point<std::chrono::steady_clock> stop_time_;
     };

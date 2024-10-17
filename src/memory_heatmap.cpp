@@ -10,26 +10,31 @@ namespace dh_comms
     memory_heatmap_t::memory_heatmap_t(size_t page_size, bool verbose)
         : verbose_(verbose),
           page_size_(page_size)
-
     {
-        (void)verbose_;
-        (void)page_size_;
     }
 
     bool memory_heatmap_t::handle(const message_t &message)
     {
         if ((message_type)message.wave_header().user_type != message_type::address)
         {
+            if (verbose_)
+            {
+                printf("memory_heatmap: skipping message with user type 0x%x\n", message.wave_header().user_type);
+            }
             return false;
         }
         assert(message.data_item_size() == 8);
         for (size_t i = 0; i != message.no_data_items(); ++i)
         {
-            uint64_t address = *(const uint64_t*)message.data_item(i);
+            uint64_t address = *(const uint64_t *)message.data_item(i);
             // map address to lowest address in page and update page count
             address /= page_size_;
             address *= page_size_;
             ++page_counts_[address];
+            if (verbose_)
+            {
+                printf("memory_heatmap: added address 0x%lx to map\n", address);
+            }
         }
         return true;
     }
@@ -48,7 +53,7 @@ namespace dh_comms
 
     void memory_heatmap_t::report()
     {
-        if(page_counts_.size() != 0)
+        if (page_counts_.size() != 0)
         {
             printf("memory heatmap: page size = %lu\n", page_size_);
         }

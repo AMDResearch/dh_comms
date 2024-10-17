@@ -66,6 +66,7 @@ namespace dh_comms
         message_handler_chain_t();
         ~message_handler_chain_t() = default;
         message_handler_chain_t(const message_handler_chain_t&) = delete;
+        message_handler_chain_t(message_handler_chain_t&&) = default;
         message_handler_chain_t& operator=(const message_handler_chain_t&) = delete;
 
         size_t size() const;

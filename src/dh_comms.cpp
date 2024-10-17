@@ -105,19 +105,24 @@ namespace dh_comms
     }
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                       std::size_t no_host_threads, bool verbose, dh_comms_mem_mgr *mgr)
+                       std::size_t no_host_threads, bool verbose,
+                       bool install_default_handlers, dh_comms_mem_mgr *mgr)
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
           no_host_threads_(no_host_threads),
-          message_handler_chains_(init_message_handler_chains(no_host_threads)),
-          sub_buffer_processors_(),
           running_(false),
           verbose_(verbose),
+          message_handler_chains_(no_host_threads),
+          sub_buffer_processors_(),
           start_time_(),
           stop_time_()
     {
         assert(no_host_threads_ != 0);
+        if(install_default_handlers)
+        {
+            install_default_message_handler_chains();
+        }
         if (verbose_)
         {
             if constexpr (shared_buffers_are_host_pinned)
@@ -130,9 +135,6 @@ namespace dh_comms
                 printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n",
                        __FILE__, __LINE__);
             }
-            printf("using %zu message handler chains with %zu handlers each\n",
-                   message_handler_chains_.size(),
-                   message_handler_chains_.size() == 0 ? 0 : message_handler_chains_[0].size());
         }
     }
 
@@ -235,15 +237,21 @@ namespace dh_comms
         }
     }
 
-    std::vector<message_handler_chain_t> dh_comms::init_message_handler_chains(std::size_t no_host_threads)
+    void dh_comms::append_handler(const message_handler_base &handler)
     {
-        assert(no_host_threads != 0);
-        std::vector<message_handler_chain_t> message_handler_chains(no_host_threads);
-        for (auto &mhc : message_handler_chains)
+        for (auto &mhc : message_handler_chains_)
         {
-            mhc.add_handler(std::make_unique<memory_heatmap_t>());
+            mhc.add_handler(std::unique_ptr<message_handler_base>(handler.clone()));
         }
-        return message_handler_chains;
+    }
+
+    void dh_comms::install_default_message_handler_chains()
+    {
+        assert(not running_);
+        assert(no_host_threads_ != 0);
+        message_handler_chains_.clear();
+        message_handler_chains_.resize(no_host_threads_);
+        append_handler(memory_heatmap_t());
     }
 
     void dh_comms::process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last)

@@ -144,6 +144,7 @@ int main(int argc, char **argv)
 
     {
         dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, no_host_threads, verbose);
+        dh_comms.append_handler(dh_comms::memory_heatmap_t(page_size, verbose));
         printf("first kernel dispatch\n");
         dh_comms.start();
         // if dh_comms sub-buffers get full during running of the kernel,
