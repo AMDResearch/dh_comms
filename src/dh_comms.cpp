@@ -144,7 +144,6 @@ namespace dh_comms
             // to hang.
             stop();
         }
-        merge_handler_states();
         if (*rsrc_.desc_.error_bits_ & 1)
         {
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
@@ -204,7 +203,7 @@ namespace dh_comms
     void dh_comms::clear_handler_states()
     {
         assert(not running_);
-        for(auto& mhc: message_handler_chains_)
+        for (auto &mhc : message_handler_chains_)
         {
             mhc.clear_handler_states();
         }
@@ -222,14 +221,16 @@ namespace dh_comms
     void dh_comms::report(bool auto_merge, bool auto_clear)
     {
         assert(not running_);
-        if(auto_merge){
+        if (auto_merge)
+        {
             merge_handler_states();
         }
-        for(auto& mhc: message_handler_chains_)
+        for (auto &mhc : message_handler_chains_)
         {
             mhc.report();
         }
-        if(auto_clear){
+        if (auto_clear)
+        {
             clear_handler_states();
         }
     }
@@ -299,6 +300,9 @@ namespace dh_comms
                 size -= message.size();
                 message_p += message.size();
             }
+
+            rsrc_.desc_.sub_buffer_sizes_[i] = 0;
+            __atomic_store_n(&rsrc_.desc_.atomic_flags_[i], flag, __ATOMIC_RELEASE);
         }
     }
 

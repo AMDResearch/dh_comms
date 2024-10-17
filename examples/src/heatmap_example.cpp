@@ -144,10 +144,19 @@ int main(int argc, char **argv)
 
     {
         dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, no_host_threads, verbose);
+        printf("first kernel dispatch\n");
         dh_comms.start();
         // if dh_comms sub-buffers get full during running of the kernel,
         // device code notifies host code to process the full buffers and
         // clear them
+        test<<<no_blocks, blocksize>>>(dst, src, 3.14, array_size, dh_comms.get_dev_rsrc_ptr());
+        CHK_HIP_ERR(hipDeviceSynchronize());
+        dh_comms.stop();
+        dh_comms.report();
+
+        // do it again to see if start/stop works
+        printf("second kernel dispatch\n");
+        dh_comms.start();
         test<<<no_blocks, blocksize>>>(dst, src, 3.14, array_size, dh_comms.get_dev_rsrc_ptr());
         CHK_HIP_ERR(hipDeviceSynchronize());
         dh_comms.stop();
