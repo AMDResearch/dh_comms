@@ -109,12 +109,15 @@ namespace dh_comms
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
+          no_host_threads_(no_host_threads),
           message_handler_chains_(init_message_handler_chains(no_host_threads)),
-          sub_buffer_processors_(init_host_threads(no_host_threads)),
-          teardown_(false),
+          sub_buffer_processors_(),
+          running_(false),
           verbose_(verbose),
-          start_time_(std::chrono::steady_clock::now())
+          start_time_(),
+          stop_time_()
     {
+        assert(no_host_threads_ != 0);
         if (verbose_)
         {
             if constexpr (shared_buffers_are_host_pinned)
@@ -128,21 +131,18 @@ namespace dh_comms
                        __FILE__, __LINE__);
             }
             printf("using %zu message handler chains with %zu handlers each\n",
-                message_handler_chains_.size(),
-                message_handler_chains_.size() == 0 ? 0 : message_handler_chains_[0].size());
+                   message_handler_chains_.size(),
+                   message_handler_chains_.size() == 0 ? 0 : message_handler_chains_[0].size());
         }
     }
 
     dh_comms::~dh_comms()
     {
-        CHK_HIP_ERR(hipDeviceSynchronize());
-        teardown_ = true;
-        for (auto &sbp : sub_buffer_processors_)
+        if(running_)
         {
-            sbp.join();
+            stop();
         }
-        const auto stop_time = std::chrono::steady_clock::now();
-        for(size_t i = 1; i < message_handler_chains_.size(); ++i)
+        for (size_t i = 1; i < message_handler_chains_.size(); ++i)
         {
             message_handler_chains_[0].merge_handler_states(message_handler_chains_[i]);
         }
@@ -156,7 +156,7 @@ namespace dh_comms
         {
             bytes_processed += mhc.bytes_processed();
         }
-        const std::chrono::duration<double> processing_time = stop_time - start_time_;
+        const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
         double MiBps = bytes_processed / processing_time.count() / 1.0e6;
         printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed, processing_time.count(), MiBps);
     }
@@ -164,6 +164,40 @@ namespace dh_comms
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()
     {
         return dev_rsrc_p_;
+    }
+
+    void dh_comms::start()
+    {
+        assert(sub_buffer_processors_.empty());
+        assert(not running_);
+        running_ = true;
+        start_time_ = std::chrono::steady_clock::now();
+        std::size_t no_sub_buffers_per_thread = rsrc_.desc_.no_sub_buffers_ / no_host_threads_;
+        std::size_t remainder = rsrc_.desc_.no_sub_buffers_ % no_host_threads_;
+
+        std::size_t first = 0;
+        std::size_t last;
+        for (std::size_t i = 0; i != no_host_threads_; ++i)
+        {
+            last = first + no_sub_buffers_per_thread;
+            if (i < remainder)
+            {
+                ++last;
+            }
+            sub_buffer_processors_.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, i, first, last));
+            first = last;
+        }
+        assert(last == rsrc_.desc_.no_sub_buffers_);
+    }
+
+    void dh_comms::stop()
+    {
+        running_ = false;
+        for (auto &sbp : sub_buffer_processors_)
+        {
+            sbp.join();
+        }
+        stop_time_ = std::chrono::steady_clock::now();
     }
 
     std::vector<message_handler_chain_t> dh_comms::init_message_handler_chains(std::size_t no_host_threads)
@@ -177,33 +211,9 @@ namespace dh_comms
         return message_handler_chains;
     }
 
-    std::vector<std::thread> dh_comms::init_host_threads(std::size_t no_host_threads)
-    {
-        assert(no_host_threads != 0);
-        std::size_t no_sub_buffers_per_thread = rsrc_.desc_.no_sub_buffers_ / no_host_threads;
-        std::size_t remainder = rsrc_.desc_.no_sub_buffers_ % no_host_threads;
-
-        std::vector<std::thread> sub_buffer_processors;
-        std::size_t first = 0;
-        std::size_t last;
-        for (std::size_t i = 0; i != no_host_threads; ++i)
-        {
-            last = first + no_sub_buffers_per_thread;
-            if (i < remainder)
-            {
-                ++last;
-            }
-            sub_buffer_processors.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, i, first, last));
-            first = last;
-        }
-        assert(last == rsrc_.desc_.no_sub_buffers_);
-
-        return sub_buffer_processors;
-    }
-
     void dh_comms::process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last)
     {
-        while (__atomic_load_n(&teardown_, __ATOMIC_ACQUIRE) == false)
+        while (__atomic_load_n(&running_, __ATOMIC_ACQUIRE))
         {
             for (size_t i = first; i != last; ++i)
             {

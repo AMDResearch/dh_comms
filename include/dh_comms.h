@@ -77,22 +77,28 @@ namespace dh_comms
         dh_comms &operator=(const dh_comms &) = delete;
         dh_comms_descriptor *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
+        void start();                                        //! Start the message processing threads on the host.
+        void stop();                                         //! Stop message processing on the host. It is the responsibility
+                                                             //! of calling code to make sure kernels have finished by e.g. issuing
+                                                             //! a hipDeviceSyncronize() or other synchronization call.
+
     private:
         void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
         std::vector<message_handler_chain_t> init_message_handler_chains(std::size_t no_host_threads);
-        std::vector<std::thread> init_host_threads(std::size_t no_host_threads);
 
     private:
         dh_comms_mem_mgr default_mgr_;
         dh_comms_mem_mgr * mgr_;
         dh_comms_resources rsrc_;
         dh_comms_descriptor *dev_rsrc_p_;
+        std::size_t no_host_threads_;
         std::vector<message_handler_chain_t> message_handler_chains_;
         std::vector<std::thread> sub_buffer_processors_;
         // message_processor_base &message_processor_;
-        volatile bool teardown_;
+        volatile bool running_;
         const bool verbose_;
-        const std::chrono::time_point<std::chrono::steady_clock> start_time_;
+        std::chrono::time_point<std::chrono::steady_clock> start_time_;
+        std::chrono::time_point<std::chrono::steady_clock> stop_time_;
     };
 
 } // namespace dh_comms
