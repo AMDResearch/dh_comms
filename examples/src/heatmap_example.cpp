@@ -6,17 +6,21 @@
 #include "dh_comms.h"
 #include "hip_utils.h"
 #include "memory_heatmap.h"
+#include "time_interval_handler.h"
+
 
 __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_comms::dh_comms_descriptor *rsrc)
 {
-    dh_comms::s_submit_timestamp(rsrc); // scalar message without lane headers or data
+    dh_comms::time_interval time_interval;
+    time_interval.start = __clock64(); // time in cycles
+    dh_comms::s_submit_wave_header(rsrc); // scalar message, wave header only
 
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= array_size)
     {
         // scalar message without lane headers, single data item
         int meaning_of_life = 42;
-        dh_comms::s_submit_message(rsrc, &meaning_of_life, sizeof(int), false, __LINE__, 1);
+        dh_comms::s_submit_message(rsrc, &meaning_of_life, sizeof(int), false, __LINE__);
 
         return;
     }
@@ -25,7 +29,7 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
 
     // scalar message with lane headers, single data item
     size_t number_of_the_beast = 666;
-    dh_comms::s_submit_message(rsrc, &number_of_the_beast, sizeof(size_t), true, __LINE__, 2);
+    dh_comms::s_submit_message(rsrc, &number_of_the_beast, sizeof(size_t), true, __LINE__);
 
     dst[idx] = alpha * src[idx];
 
@@ -33,6 +37,8 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
     // source code line is passed as location index
     dh_comms::v_submit_address(rsrc, src + idx, __LINE__);
     dh_comms::v_submit_address(rsrc, dst + idx, __LINE__);
+    time_interval.stop = __clock64(); // time in cycles
+    s_submit_time_interval(rsrc, &time_interval);
 }
 
 void help(char **argv)
@@ -148,7 +154,8 @@ int main(int argc, char **argv)
         dh_comms.stop();
         dh_comms.report();
 
-        // do it again to see if start/stop works
+        // do it again to see if start/stop works, and add a handler for time intervals
+        dh_comms.append_handler(std::make_unique<dh_comms::time_interval_handler_t>(verbose));
         printf("second kernel dispatch\n");
         dh_comms.start();
         test<<<no_blocks, blocksize>>>(dst, src, 3.14, array_size, dh_comms.get_dev_rsrc_ptr());

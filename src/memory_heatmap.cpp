@@ -23,7 +23,7 @@ namespace dh_comms
             }
             return false;
         }
-        assert(message.data_item_size() == 8);
+        assert(message.data_item_size() == sizeof(uint64_t));
         for (size_t i = 0; i != message.no_data_items(); ++i)
         {
             uint64_t address = *(const uint64_t *)message.data_item(i);
@@ -43,12 +43,12 @@ namespace dh_comms
     {
         if (page_counts_.size() != 0)
         {
-            printf("memory heatmap: page size = %lu\n", page_size_);
+            printf("memory heatmap report:\n\tpage size = %lu\n", page_size_);
         }
         for (const auto &[first_page_address, count] : page_counts_)
         {
             auto last_page_address = first_page_address + page_size_ - 1;
-            printf("page [%016lx:%016lx] %12lu accesses\n", first_page_address, last_page_address, count);
+            printf("\tpage [%016lx:%016lx] %12lu accesses\n", first_page_address, last_page_address, count);
         }
     }
 

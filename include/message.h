@@ -8,6 +8,7 @@ namespace dh_comms
     enum class message_type : uint32_t
     {
         address = 0,
+        time_interval = 1,
         undefined = 0xffffffff
     };
 

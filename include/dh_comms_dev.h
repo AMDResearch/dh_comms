@@ -279,10 +279,10 @@ namespace dh_comms
         generic_submit_message(rsrc, message, message_size, src_loc_idx, user_type, is_vector_message, submit_lane_headers);
     }
 
-    //! \brief Submit a scalar timestamp message (just a single wave header; no lane headers, no message data)
+    //! \brief Submit a a single wave header; no lane headers, no message data.
     //!
     //! Messages are submitted on a per-wave basis, and only the first active lane in the wave submits.
-    __device__ inline void s_submit_timestamp(dh_comms_descriptor *rsrc) //!< Pointer to dh_comms device resources used for message submission.
+    __device__ inline void s_submit_wave_header(dh_comms_descriptor *rsrc) //!< Pointer to dh_comms device resources used for message submission.
     {
         s_submit_message(rsrc);
     }
@@ -291,5 +291,10 @@ namespace dh_comms
     __device__ inline void v_submit_address(dh_comms_descriptor *rsrc, void* address, uint32_t src_loc_idx = 0xffffffff)
     {
             v_submit_message(rsrc, &address, sizeof(void *), src_loc_idx, 0);
+    }
+
+    __device__ inline void s_submit_time_interval(dh_comms_descriptor *rsrc, void* time_interval, uint32_t src_loc_idx = 0xffffffff)
+    {
+        s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), false, src_loc_idx, 1);
     }
 } // namespace dh_comms
