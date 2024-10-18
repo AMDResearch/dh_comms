@@ -105,23 +105,21 @@ namespace dh_comms
     }
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
-                       std::size_t no_host_threads, bool verbose,
+                       bool verbose,
                        bool install_default_handlers, dh_comms_mem_mgr *mgr)
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
-          no_host_threads_(no_host_threads),
           running_(false),
           verbose_(verbose),
-          message_handler_chains_(no_host_threads),
-          sub_buffer_processors_(),
+          message_handler_chain_(),
+          sub_buffer_processor_(),
           start_time_(),
           stop_time_()
     {
-        assert(no_host_threads_ != 0);
-        if(install_default_handlers)
+        if (install_default_handlers)
         {
-            install_default_message_handler_chains();
+            install_default_message_handlers();
         }
         if (verbose_)
         {
@@ -151,14 +149,6 @@ namespace dh_comms
             printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
         }
         mgr_->free_device_memory(dev_rsrc_p_);
-        size_t bytes_processed = 0;
-        for (const auto &mhc : message_handler_chains_)
-        {
-            bytes_processed += mhc.bytes_processed();
-        }
-        const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
-        double MiBps = bytes_processed / processing_time.count() / 1.0e6;
-        printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed, processing_time.count(), MiBps);
     }
 
     dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr()
@@ -169,96 +159,64 @@ namespace dh_comms
     void dh_comms::start()
     {
         assert(not running_);
-        assert(sub_buffer_processors_.empty());
         running_ = true;
         start_time_ = std::chrono::steady_clock::now();
-        std::size_t no_sub_buffers_per_thread = rsrc_.desc_.no_sub_buffers_ / no_host_threads_;
-        std::size_t remainder = rsrc_.desc_.no_sub_buffers_ % no_host_threads_;
-
-        std::size_t first = 0;
-        std::size_t last;
-        for (std::size_t i = 0; i != no_host_threads_; ++i)
-        {
-            last = first + no_sub_buffers_per_thread;
-            if (i < remainder)
-            {
-                ++last;
-            }
-            sub_buffer_processors_.emplace_back(std::thread(&dh_comms::process_sub_buffers, this, i, first, last));
-            first = last;
-        }
-        assert(last == rsrc_.desc_.no_sub_buffers_);
+        bytes_processed_ = 0;
+        sub_buffer_processor_ = std::thread(&dh_comms::process_sub_buffers, this);
     }
 
     void dh_comms::stop()
     {
         assert(running_);
         running_ = false;
-        for (auto &sbp : sub_buffer_processors_)
-        {
-            sbp.join();
-        }
         stop_time_ = std::chrono::steady_clock::now();
-        sub_buffer_processors_.clear();
+        sub_buffer_processor_.join();
     }
 
     void dh_comms::clear_handler_states()
     {
         assert(not running_);
-        for (auto &mhc : message_handler_chains_)
-        {
-            mhc.clear_handler_states();
-        }
+        message_handler_chain_.clear_handler_states();
     }
 
-    void dh_comms::merge_handler_states()
+    void dh_comms::delete_handlers()
     {
         assert(not running_);
-        for (size_t i = 1; i < message_handler_chains_.size(); ++i)
-        {
-            message_handler_chains_[0].merge_handler_states(message_handler_chains_[i]);
-        }
+        message_handler_chain_.clear();
     }
 
-    void dh_comms::report(bool auto_merge, bool auto_clear)
+    void dh_comms::report(bool auto_clear_states)
     {
         assert(not running_);
-        if (auto_merge)
-        {
-            merge_handler_states();
-        }
-        for (auto &mhc : message_handler_chains_)
-        {
-            mhc.report();
-        }
-        if (auto_clear)
+        message_handler_chain_.report();
+
+        const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
+        double MiBps = bytes_processed_ / processing_time.count() / 1.0e6;
+        printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed_, processing_time.count(), MiBps);
+
+        if (auto_clear_states)
         {
             clear_handler_states();
         }
     }
 
-    void dh_comms::append_handler(const message_handler_base &handler)
-    {
-        for (auto &mhc : message_handler_chains_)
-        {
-            mhc.add_handler(std::unique_ptr<message_handler_base>(handler.clone()));
-        }
-    }
-
-    void dh_comms::install_default_message_handler_chains()
+    void dh_comms::append_handler(std::unique_ptr<message_handler_base>&& message_handler)
     {
         assert(not running_);
-        assert(no_host_threads_ != 0);
-        message_handler_chains_.clear();
-        message_handler_chains_.resize(no_host_threads_);
-        append_handler(memory_heatmap_t());
+        message_handler_chain_.add_handler(std::move(message_handler));
     }
 
-    void dh_comms::process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last)
+    void dh_comms::install_default_message_handlers()
+    {
+        assert(not running_);
+        append_handler(std::make_unique<memory_heatmap_t>());
+    }
+
+    void dh_comms::process_sub_buffers()
     {
         while (__atomic_load_n(&running_, __ATOMIC_ACQUIRE))
         {
-            for (size_t i = first; i != last; ++i)
+            for (size_t i = 0; i != rsrc_.desc_.no_sub_buffers_; ++i)
             {
                 // when the sub-buffer for a wave on the device is full, it will
                 // set the flag to either 3 (if it wants control back after the host
@@ -267,14 +225,15 @@ namespace dh_comms
                 uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
                 if (flag > 1) // buffer is full: process and reset
                 {
-                    // TODO: process data
+                    // process data
                     size_t size = rsrc_.desc_.sub_buffer_sizes_[i];
+                    bytes_processed_ += size;
                     size_t byte_offset = i * rsrc_.desc_.sub_buffer_capacity_;
                     char *message_p = &rsrc_.desc_.buffer_[byte_offset];
-                    while (size != 0)
+                    while (size != 0 and message_handler_chain_.size() != 0)
                     {
                         message_t message(message_p);
-                        message_handler_chains_[thread_no].handle(message);
+                        message_handler_chain_.handle(message);
                         assert(message.size() <= size);
                         size -= message.size();
                         message_p += message.size();
@@ -289,21 +248,22 @@ namespace dh_comms
         }
 
         // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
-        for (size_t i = first; i != last; ++i)
+        for (size_t i = 0; i != rsrc_.desc_.no_sub_buffers_; ++i)
         {
             uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
             if (flag != 0) // Should not happen, indicates a missing atomic release from device code
             {
                 printf("Found non-zero flag for sub-buffer %lu\n", i);
             }
-            // TODO: process data
+            // process data
             size_t size = rsrc_.desc_.sub_buffer_sizes_[i];
+            bytes_processed_ += size;
             size_t byte_offset = i * rsrc_.desc_.sub_buffer_capacity_;
             char *message_p = &rsrc_.desc_.buffer_[byte_offset];
-            while (size != 0)
+            while (size != 0 and message_handler_chain_.size() != 0)
             {
                 message_t message(message_p);
-                message_handler_chains_[thread_no].handle(message);
+                message_handler_chain_.handle(message);
                 assert(message.size() <= size);
                 size -= message.size();
                 message_p += message.size();

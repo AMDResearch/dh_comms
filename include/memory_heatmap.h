@@ -12,12 +12,8 @@ namespace dh_comms
         memory_heatmap_t(const memory_heatmap_t&) = default;
         virtual ~memory_heatmap_t(){};
         virtual bool handle(const message_t &message) override;
-        virtual void merge_state(message_handler_base &other) override;
         virtual void report() override;
         virtual void clear() override;
-
-    protected:
-        virtual memory_heatmap_t* clone_impl() const override { return new memory_heatmap_t(*this); }
 
     private:
         bool verbose_;

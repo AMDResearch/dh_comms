@@ -47,9 +47,6 @@ void help(char **argv)
            "     Set the number of sub-buffers used to pass messages from device to host to n.\n"
            "  -c <n>, --sub-buffer-capacity <n>:\n"
            "     Set the capacity of each of the sub-buffers to n bytes.\n"
-           "  -t <n>, --no-host-threads <n>:\n"
-           "     Use n threads for host-side processing of the messages.\n"
-           "     Message processor needs to be thread-safe for values of n > 1.\n"
            "  -p <n>, --page-size <n>:\n"
            "     Assume a page size of n for counting memory accesses for each page.\n"
            "  -v, --verbose:\n"
@@ -61,7 +58,7 @@ void help(char **argv)
 }
 
 void get_options(int argc, char **argv, size_t &array_size, int &threads_per_block,
-                 size_t &no_sub_buffers, size_t &sub_buffer_capacity, size_t &no_host_threads,
+                 size_t &no_sub_buffers, size_t &sub_buffer_capacity,
                  size_t &page_size, bool &verbose)
 {
     static struct option long_options[] =
@@ -71,7 +68,6 @@ void get_options(int argc, char **argv, size_t &array_size, int &threads_per_blo
             {"blocksize", required_argument, 0, 'b'},
             {"no-sub-buffers", required_argument, 0, 's'},
             {"sub-buffer-capacity", required_argument, 0, 'c'},
-            {"no-host-threads", required_argument, 0, 't'},
             {"page-size", required_argument, 0, 'p'},
             {"verbose", no_argument, 0, 'v'},
             {0, 0, 0, 0}};
@@ -79,7 +75,7 @@ void get_options(int argc, char **argv, size_t &array_size, int &threads_per_blo
     int c;
     while (true)
     {
-        c = getopt_long(argc, argv, "a:b:s:c:t:p:vh", long_options, &option_index);
+        c = getopt_long(argc, argv, "a:b:s:c:p:vh", long_options, &option_index);
         if (c == -1) // end of options
         {
             break;
@@ -98,9 +94,6 @@ void get_options(int argc, char **argv, size_t &array_size, int &threads_per_blo
             break;
         case 'c':
             sub_buffer_capacity = std::stoull(optarg);
-            break;
-        case 't':
-            no_host_threads = std::stoull(optarg);
             break;
         case 'p':
             page_size = std::stoull(optarg);
@@ -125,7 +118,6 @@ int main(int argc, char **argv)
     //    dh_comms configuration parameters
     size_t no_sub_buffers = 256; // gave best performance in several not too thorough tests
     size_t sub_buffer_capacity = 64 * 1024;
-    size_t no_host_threads = 1; // initial implementation of memory map processing is not thread-safe
     //    memory heatmap configuration parameter
     size_t page_size = 1024 * 1024; // large page size to reduce output
     //    both dh_comms and heatmap configuration parameter
@@ -133,7 +125,7 @@ int main(int argc, char **argv)
 
     // now see if user specified parameter values other than default
     get_options(argc, argv, array_size, blocksize,
-                no_sub_buffers, sub_buffer_capacity, no_host_threads,
+                no_sub_buffers, sub_buffer_capacity,
                 page_size, verbose);
 
     const int no_blocks = (array_size + blocksize - 1) / blocksize;
@@ -143,8 +135,8 @@ int main(int argc, char **argv)
     CHK_HIP_ERR(hipMalloc(&dst, array_size * sizeof(float)));
 
     {
-        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, no_host_threads, verbose);
-        dh_comms.append_handler(dh_comms::memory_heatmap_t(page_size, verbose));
+        dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, verbose);
+        dh_comms.append_handler(std::make_unique<dh_comms::memory_heatmap_t>(page_size, verbose));
         printf("first kernel dispatch\n");
         dh_comms.start();
         // if dh_comms sub-buffers get full during running of the kernel,
@@ -162,6 +154,16 @@ int main(int argc, char **argv)
         CHK_HIP_ERR(hipDeviceSynchronize());
         dh_comms.stop();
         dh_comms.report();
+
+        // run once more, but first delete the handlers, so that all messages will be dropped
+        printf("third kernel dispatch\n");
+        dh_comms.delete_handlers();
+        dh_comms.start();
+        test<<<no_blocks, blocksize>>>(dst, src, 3.14, array_size, dh_comms.get_dev_rsrc_ptr());
+        CHK_HIP_ERR(hipDeviceSynchronize());
+        dh_comms.stop();
+        dh_comms.report();
+
     }
 
     CHK_HIP_ERR(hipFree(src));

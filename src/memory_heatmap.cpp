@@ -39,18 +39,6 @@ namespace dh_comms
         return true;
     }
 
-    void memory_heatmap_t::merge_state(message_handler_base &other)
-    {
-        memory_heatmap_t &other_mh = dynamic_cast<memory_heatmap_t &>(other);
-        for (const auto &[page, count] : other_mh.page_counts_)
-        {
-            page_counts_[page] += count;
-        }
-
-        other_mh.clear();
-        return;
-    }
-
     void memory_heatmap_t::report()
     {
         if (page_counts_.size() != 0)

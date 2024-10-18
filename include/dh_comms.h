@@ -63,8 +63,6 @@ namespace dh_comms
     public:
         dh_comms(std::size_t no_sub_buffers,                //!< Number of sub-buffers into which the main data buffer is partitioned.
                  std::size_t sub_buffer_capacity,           //!< The maximum number of bytes each of the sub-buffers can hold.
-                 std::size_t no_host_threads = 1,           //!< Controls how many threads host code uses to process messages in the
-                                                            //!< sub-buffers.
                  bool verbose = false,                       //!< Controls how chatty the code is.
                  bool install_default_handlers = false,
                  dh_comms_mem_mgr *mgr = NULL
@@ -74,33 +72,35 @@ namespace dh_comms
         dh_comms &operator=(const dh_comms &) = delete;
         dh_comms_descriptor *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
-        void start();                                        //! Start the message processing threads on the host.
-        void stop();                                         //! Stop message processing on the host. It is the responsibility
-                                                             //! of calling code to make sure kernels have finished by e.g. issuing
-                                                             //! a hipDeviceSyncronize() or other synchronization call.
-        void append_handler(const message_handler_base& handler);
-        void clear_handler_states();
-        void merge_handler_states();
-        void report(bool auto_merge = true,
-                    bool auto_clear = true);
+        void start();                                        //!< Start the message processing threads on the host.
+        void stop();                                         //!< Stop message processing on the host. It is the responsibility
+                                                             //!< of calling code to make sure kernels have finished by e.g. issuing
+                                                             //!< a hipDeviceSyncronize() or other synchronization call.
+                                                             //! Append a message handler to the end of the handler chain.
+        void append_handler(std::unique_ptr<message_handler_base>&& message_handler);
+        void clear_handler_states();                         //!< Keep the message handler, but clear their states, so that they
+                                                             //!< can be reused for a subsequent run.
+        void delete_handlers();                              //!< delete the message handlers, so that a new set can be installed
+                                                             //!< for a subsequent run.
+        void report(bool auto_clear_states = true);
 
     private:
-        void process_sub_buffers(std::size_t thread_no, std::size_t first, std::size_t last);
-        void install_default_message_handler_chains();
+        void process_sub_buffers();
+        void install_default_message_handlers();
 
     private:
         dh_comms_mem_mgr default_mgr_;
         dh_comms_mem_mgr * mgr_;
         dh_comms_resources rsrc_;
         dh_comms_descriptor *dev_rsrc_p_;
-        std::size_t no_host_threads_;
         volatile bool running_;
         const bool verbose_;
-        std::vector<message_handler_chain_t> message_handler_chains_;
-        std::vector<std::thread> sub_buffer_processors_;
+        message_handler_chain_t message_handler_chain_;
+        std::thread sub_buffer_processor_;
         // message_processor_base &message_processor_;
         std::chrono::time_point<std::chrono::steady_clock> start_time_;
         std::chrono::time_point<std::chrono::steady_clock> stop_time_;
+        std::size_t bytes_processed_;
     };
 
 } // namespace dh_comms
