@@ -73,16 +73,26 @@ namespace dh_comms
         dh_comms_descriptor *get_dev_rsrc_ptr();             //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
         void start();                                        //!< Start the message processing threads on the host.
-        void stop();                                         //!< Stop message processing on the host. It is the responsibility
+        void stop();                                         //!< \brief Stop message processing on the host.
+                                                             //!<
+                                                             //!< It is the responsibility
                                                              //!< of calling code to make sure kernels have finished by e.g. issuing
                                                              //!< a hipDeviceSyncronize() or other synchronization call.
-                                                             //! Append a message handler to the end of the handler chain.
         void append_handler(std::unique_ptr<message_handler_base>&& message_handler);
-        void clear_handler_states();                         //!< Keep the message handler, but clear their states, so that they
+                                                             //!< \brief Append a message handler to the end of the handler chain.
+                                                             //!<
+                                                             //!< A handler may handle just a single message type, or it may handle
+                                                             //!< multiple message types. The first handler that can handle a message
+                                                             //!< of a particular type gets to handle it. If a message cannot be
+                                                             //!< handled by any handler in the chain, it is silently dropped.
+        void clear_handler_states();                         //!< Keep the message handlers, but clear their states, so that they
                                                              //!< can be reused for a subsequent run.
         void delete_handlers();                              //!< delete the message handlers, so that a new set can be installed
                                                              //!< for a subsequent run.
-        void report(bool auto_clear_states = true);
+        void report(bool auto_clear_states = true);          //!< \brief calls the report() function of all message handlers
+                                                             //!<
+                                                             //!< if auto_clear_states is true, the states of the message handlers
+                                                             //!< will be cleared after reporting
 
     private:
         void process_sub_buffers();

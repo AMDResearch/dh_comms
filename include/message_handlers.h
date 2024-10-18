@@ -8,9 +8,8 @@ namespace dh_comms
 {
     //! \brief base class for message handlers on the host.
     //!
-    //! dh_comms maintains one or more chains of message handlers, one chain per
-    //! host processing thread. The message handlers in a chain get to look at the
-    //! message, and determine whether they can handle it by inspecting the wave header,
+    //! dh_comms maintains a chain of message handlers. These message handlers get to look at
+    //! the message, and determine whether they can handle it by inspecting the wave header,
     //! and in most cases, the user_type field of the wave header in particular. If a
     //! message handler cannot handle the message, its handle() function returns false,
     //! which will result in the next handler in the chain to get a chance at handling
@@ -26,9 +25,9 @@ namespace dh_comms
         //! A derived class implementing handle() must handle a message if it can and return
         //! true, or, if it cannot handle the message, return false.
         virtual bool handle(const message_t& message) = 0;
-        //! Message handlers that aggregate data during message processing may want to report
+        //! Stateful message handlers that aggregate data during message processing may want to report
         //! the data when done. They may do so by overriding this function. Not all message handlers
-        //! may need to report data in the end, e.g., message handlers that just save messages to disk
+        //! may need to report data in the end, e.g., stateless message handlers that just save messages to disk
         //! on the fly as they are processed. These handlers do not need override this function, but just
         //! rely on the implementation of this function by the base class, which does nothing.
         virtual void report(){}
