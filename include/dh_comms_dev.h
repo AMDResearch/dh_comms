@@ -247,6 +247,8 @@ namespace dh_comms
     //! \brief Submit a vector message of any type that is valid in device code from the device to the host.
     //!
     //! Messages are submitted on a per-wave basis, and only the active lanes in the wave submit.
+    __attribute__((used))
+    extern "C"
     __device__ inline void v_submit_message(dh_comms_descriptor *rsrc,          //!< Pointer to dh_comms device resources used for message submission.
                                                                                 //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
                                                                                 //!< and passed as a kernel argument to kernels that want to use v_submit_message().
@@ -264,6 +266,8 @@ namespace dh_comms
     //! \brief Submit a scalar message of any type that is valid in device code from the device to the host.
     //!
     //! Messages are submitted on a per-wave basis, and only the first active lane in the wave submits.
+    __attribute__((used))
+    extern "C"
     __device__ inline void s_submit_message(dh_comms_descriptor *rsrc,         //!< Pointer to dh_comms device resources used for message submission.
                                                                               //!< This pointer is acquired by host code by calling dh_comms::get_dev_rsrc_ptr(),
                                                                               //!< and passed as a kernel argument to kernels that want to use v_submit_message().
@@ -288,11 +292,15 @@ namespace dh_comms
     }
 
 
+    __attribute__((used))
+    extern "C"
     __device__ inline void v_submit_address(dh_comms_descriptor *rsrc, void* address, uint32_t src_loc_idx = 0xffffffff)
     {
             v_submit_message(rsrc, &address, sizeof(void *), src_loc_idx, 0);
     }
 
+    __attribute__((used))
+    extern "C"
     __device__ inline void s_submit_time_interval(dh_comms_descriptor *rsrc, void* time_interval, uint32_t src_loc_idx = 0xffffffff)
     {
         s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), false, src_loc_idx, 1);
