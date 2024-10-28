@@ -38,10 +38,10 @@ add_subdirectory(doc)
 # Ugly hack to create bitcode file(s) from one of the headers with inline device functions
 # To be changed into a proper CMake approach after attending to higher-priority tasks
 add_custom_target(dh_comms_bc ALL
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -O3 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -fgpu-rdc -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND mkdir -p lib
 # ignore multiple GPU archs for now, and assume a single one
-    COMMAND bash -c \'mv dh_comms*-hip-*.bc lib/dh_comms_dev.bc\'
+    COMMAND mv dh_comms*-hip-*[0-9a].bc lib/dh_comms_dev.bc
     COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
 )
 
