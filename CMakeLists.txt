@@ -35,16 +35,32 @@ message(STATUS "==> To change install dirs, rerun cmake with argument \"-DCMAKE_
 add_subdirectory(examples)
 add_subdirectory(doc)
 
-# Ugly hack to create bitcode file(s) from one of the headers with inline device functions
-# To be changed into a proper CMake approach after attending to higher-priority tasks
-add_custom_target(dh_comms_bc ALL
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -fgpu-rdc -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
+# Create bitcode files for use in kernel instrumentation
+
+set(DH_COMMS_SUPPORTED_ARCHS gfx906 gfx908 gfx90a gfx940 gfx941 gfx942)
+foreach(arch ${DH_COMMS_SUPPORTED_ARCHS})
+    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_BINARY_DIR}/lib/dh_comms_dev.${arch}.bc)
+    list(APPEND DH_COMMS_OFFLOAD_ARCHS "--offload-arch=${arch}")
+endforeach()
+
+add_custom_command(
+    OUTPUT dh_comms_bc.stamp
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
+            -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND mkdir -p lib
-# ignore multiple GPU archs for now, and assume a single one
-    COMMAND mv dh_comms*-hip-*[0-9a].bc lib/dh_comms_dev.bc
+    COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.gfx/'` \; done
     COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
+    COMMAND touch dh_comms_bc.stamp
+    DEPENDS include/dh_comms_dev.h
 )
 
+add_custom_target(dh_comms_bc ALL
+    DEPENDS dh_comms_bc.stamp
+)
+
+set_property(TARGET dh_comms_bc APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${DH_COMMS_BITCODE_FILES})
+
 install(PROGRAMS
-    ${CMAKE_BINARY_DIR}/lib/dh_comms_dev.bc
-    DESTINATION lib)
+    ${DH_COMMS_BITCODE_FILES}
+    DESTINATION lib
+)
