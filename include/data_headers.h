@@ -30,13 +30,15 @@ namespace dh_comms
                                         //!< Note that the processing code on the host is to be provided by the user, although
                                         //!< some basic data processor classes are included with dh_comms. By using the user_type
                                         //!< tag, kernel code can indicate the type of data in the message, so that the host
-                                        //!< processing code knows what to do with it. The user_type tag could also be used to
-                                        //!< distinguish between messages from different kernels or kernel dispatches, if we are
-                                        //!< using a single dh_comms object to pass messages from the device to the host, as
-                                        //!< opposed to having a separate dh_comms object per kernel or kernel dispatch. Another
-                                        //!< use of the user_type tag is to distinguish between memory reads vs writes, if our
-                                        //!< messages contain the memory addresses (say, if we are building a memory heatmap of
-                                        //!< the application), or to distinguish between identical message types submitted from
+                                        //!< processing code knows what to do with it.
+        uint32_t user_data;             //!< \brief user-defined field for additional data for the message.
+                                        //!<
+                                        //!< This field can for instance be used to distinguish between messages from different
+                                        //!< kernels or kernel dispatches, if we are using a single dh_comms object to pass
+                                        //!< messages from the device to the host, as opposed to having a separate dh_comms
+                                        //!< object per kernel or kernel dispatch. Another use of the user_type tag is to distinguish
+                                        //!< between memory reads vs writes, if our messages contain memory addresses (say, if
+                                        //!< we are building a memory heatmap of the application).
                                         //!< different locations in the ISA or source code.
         uint16_t block_idx_x;           //!< blockIdx.x value of the workgroup to which the wave belongs.
         uint16_t block_idx_y;           //!< blockIdx.y value of the workgroup to which the wave belongs.
@@ -62,10 +64,10 @@ namespace dh_comms
         //! constructor argument are detected and assigned by the constructor.
         __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
                                  uint64_t timestamp, uint32_t active_lane_count,
-                                 uint32_t src_loc_idx, uint32_t user_type);
+                                 uint32_t src_loc_idx, uint32_t user_type, uint32_t user_data);
 
         //! Wave header constructor; creates a wave header from raw bytes
-        wave_header_t(const char* wave_header_p);
+        wave_header_t(const char *wave_header_p);
     };
 
     //! \brief After the wave header, there's an optional lane header for each of the active lanes in the wavefront.
@@ -85,7 +87,7 @@ namespace dh_comms
         __device__ lane_header_t();
 
         //! Lane header constructor; creates a lane header from raw bytes
-        lane_header_t(const char* lane_header_p);
+        lane_header_t(const char *lane_header_p);
     };
 
 } // namespace dh_comms

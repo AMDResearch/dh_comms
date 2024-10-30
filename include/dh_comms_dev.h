@@ -117,6 +117,7 @@ namespace dh_comms
                                                   uint32_t src_loc_idx,     // Integer to identify the source code location from which v_submit_message() is called.
                                                   uint32_t user_type,       // Tag to distinguish between different kinds of messages, used by host
                                                                             // code that processes the messages.
+                                                  uint32_t user_data,       // Auxiliary data field; it's use depends on the message type.
                                                   bool is_vector_message,   // true if all active lanes are to submit a message, false for scalar submit, where only
                                                                             // the first active lane is to submit
                                                   bool submit_lane_headers) // true if lane headers (with thread coordinates for the lane) are to be included after
@@ -165,7 +166,7 @@ namespace dh_comms
         if (active_lane_id == 0)
         {
             wave_header_t wave_header(exec, data_size, is_vector_message, submit_lane_headers,
-                                      timestamp, active_lane_count, src_loc_idx, user_type);
+                                      timestamp, active_lane_count, src_loc_idx, user_type, user_data);
             size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size;
             wave_header_t *wave_header_p = (wave_header_t *)(&buffer[byte_offset]);
             *wave_header_p = wave_header;
@@ -255,12 +256,13 @@ namespace dh_comms
                                             const void *message,                //!< Pointer to message to be submitted.
                                             size_t message_size,                //!< Size of the message in bytes
                                             uint32_t src_loc_idx = 0xffffffff,  //!< Integer to identify the source code location from which v_submit_message() is called.
-                                            uint32_t user_type = 0xffffffff)    //!< Tag to distinguish between different kinds of messages, used by host
-                                                                      //!< code that processes the messages.
+                                            uint32_t user_type = 0xffffffff,    //!< Tag to distinguish between different kinds of messages, used by host
+                                                                                //!< code that processes the messages.
+                                            uint32_t user_data = 0xffffffff)    //!< Auxiliary data; use depends on user_type.
     {
         bool is_vector_message = true;
         bool submit_lane_headers = true;
-        generic_submit_message(rsrc, message, message_size, src_loc_idx, user_type, is_vector_message, submit_lane_headers);
+        generic_submit_message(rsrc, message, message_size, src_loc_idx, user_type, user_data, is_vector_message, submit_lane_headers);
     }
 
     //! \brief Submit a scalar message of any type that is valid in device code from the device to the host.
@@ -276,11 +278,12 @@ namespace dh_comms
                                             bool submit_lane_headers = false, //!< true if lane headers for active lanes (containing thread coordinates) are to
                                                                               //!< be submitted, false otherwise
                                             uint32_t src_loc_idx = 0xffffffff,//!< Integer to identify the source code location from which v_submit_message() is called.
-                                            uint32_t user_type = 0xffffffff)  //!< Tag to distinguish between different kinds of messages, used by host
+                                            uint32_t user_type = 0xffffffff,  //!< Tag to distinguish between different kinds of messages, used by host
                                                                               //!< code that processes the messages.
+                                            uint32_t user_data = 0xffffffff)   //!< Auxiliary data; use depends on user_type.
     {
         bool is_vector_message = false;
-        generic_submit_message(rsrc, message, message_size, src_loc_idx, user_type, is_vector_message, submit_lane_headers);
+        generic_submit_message(rsrc, message, message_size, src_loc_idx, user_type, user_data, is_vector_message, submit_lane_headers);
     }
 
     //! \brief Submit a a single wave header; no lane headers, no message data.
