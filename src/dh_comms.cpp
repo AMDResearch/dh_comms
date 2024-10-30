@@ -200,7 +200,7 @@ namespace dh_comms
         }
     }
 
-    void dh_comms::append_handler(std::unique_ptr<message_handler_base>&& message_handler)
+    void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_handler)
     {
         assert(not running_);
         message_handler_chain_.add_handler(std::move(message_handler));
@@ -212,66 +212,61 @@ namespace dh_comms
         append_handler(std::make_unique<memory_heatmap_t>());
     }
 
-    void dh_comms::process_sub_buffers()
+    void dh_comms::processing_loop(bool is_final_loop)
     {
-        while (__atomic_load_n(&running_, __ATOMIC_ACQUIRE))
-        {
-            for (size_t i = 0; i != rsrc_.desc_.no_sub_buffers_; ++i)
-            {
-                // when the sub-buffer for a wave on the device is full, it will
-                // set the flag to either 3 (if it wants control back after the host
-                // is done processing the sub-buffer) or 2 (if it doesn't want control back,
-                // and instead allows any wave to take control of the sub-buffer)
-                uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
-                if (flag > 1) // buffer is full: process and reset
-                {
-                    // process data
-                    size_t size = rsrc_.desc_.sub_buffer_sizes_[i];
-                    bytes_processed_ += size;
-                    size_t byte_offset = i * rsrc_.desc_.sub_buffer_capacity_;
-                    char *message_p = &rsrc_.desc_.buffer_[byte_offset];
-                    while (size != 0 and message_handler_chain_.size() != 0)
-                    {
-                        message_t message(message_p);
-                        message_handler_chain_.handle(message);
-                        assert(message.size() <= size);
-                        size -= message.size();
-                        message_p += message.size();
-                    }
-
-                    rsrc_.desc_.sub_buffer_sizes_[i] = 0;
-                    // setting the flag to either 1 (giving contol back to the signaling wave)
-                    // or 0 (allowing any wave to take control of the sub-buffer)
-                    __atomic_store_n(&rsrc_.desc_.atomic_flags_[i], flag - 2, __ATOMIC_RELEASE);
-                }
-            }
-        }
-
-        // printf("[Host] process_sub_buffers: processing partially full sub-buffers after kernels have finished\n");
         for (size_t i = 0; i != rsrc_.desc_.no_sub_buffers_; ++i)
         {
-            uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
-            if (flag != 0) // Should not happen, indicates a missing atomic release from device code
-            {
-                printf("Found non-zero flag for sub-buffer %lu\n", i);
-            }
-            // process data
-            size_t size = rsrc_.desc_.sub_buffer_sizes_[i];
-            bytes_processed_ += size;
-            size_t byte_offset = i * rsrc_.desc_.sub_buffer_capacity_;
-            char *message_p = &rsrc_.desc_.buffer_[byte_offset];
-            while (size != 0 and message_handler_chain_.size() != 0)
-            {
-                message_t message(message_p);
-                message_handler_chain_.handle(message);
-                assert(message.size() <= size);
-                size -= message.size();
-                message_p += message.size();
-            }
+            // when the sub-buffer for a wave on the device is full, it will
+            // set the flag to either 3 (if it wants control back after the host
+            // is done processing the sub-buffer) or 2 (if it doesn't want control back,
+            // and instead allows any wave to take control of the sub-buffer)
 
-            rsrc_.desc_.sub_buffer_sizes_[i] = 0;
-            __atomic_store_n(&rsrc_.desc_.atomic_flags_[i], flag, __ATOMIC_RELEASE);
+            // in the final processing loop, sub-buffers are either empty or partially filled,
+            // but not full, and we expect the flag to be zero.
+            uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
+            if (is_final_loop or flag > 1) // process and reset
+            {
+                if (is_final_loop and flag != 0) // Should not happen, indicates a missing atomic release from device code
+                {
+                    printf("Found non-zero flag for sub-buffer %lu in final processing loop\n", i);
+                }
+                // process data
+                size_t size = rsrc_.desc_.sub_buffer_sizes_[i];
+                bytes_processed_ += size;
+                size_t byte_offset = i * rsrc_.desc_.sub_buffer_capacity_;
+                char *message_p = &rsrc_.desc_.buffer_[byte_offset];
+                while (size != 0 and message_handler_chain_.size() != 0)
+                {
+                    message_t message(message_p);
+                    message_handler_chain_.handle(message);
+                    assert(message.size() <= size);
+                    size -= message.size();
+                    message_p += message.size();
+                }
+
+                rsrc_.desc_.sub_buffer_sizes_[i] = 0;
+                // in case this is not the final processing loop:
+                // setting the flag to either 1 (giving contol back to the signaling wave)
+                // or 0 (allowing any wave to take control of the sub-buffer)
+                // in case this is the final processing loop: set the flag to zero.
+                flag = is_final_loop ? 0 : flag - 2;
+                __atomic_store_n(&rsrc_.desc_.atomic_flags_[i], flag, __ATOMIC_RELEASE);
+            }
         }
+    }
+
+    void dh_comms::process_sub_buffers()
+    {
+        // process buffers when device code indicates they are full
+        bool is_final_loop = false;
+        while (__atomic_load_n(&running_, __ATOMIC_ACQUIRE))
+        {
+            processing_loop(is_final_loop);
+        }
+
+        // after stopping dh_comms, process partially full buffers in a final pass
+        is_final_loop = true;
+        processing_loop(is_final_loop);
     }
 
 } // namespace dh_comms

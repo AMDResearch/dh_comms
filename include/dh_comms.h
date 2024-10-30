@@ -96,6 +96,7 @@ namespace dh_comms
 
     private:
         void process_sub_buffers();
+        void processing_loop(bool is_final_loop);
         void install_default_message_handlers();
 
     private:
@@ -107,7 +108,6 @@ namespace dh_comms
         const bool verbose_;
         message_handler_chain_t message_handler_chain_;
         std::thread sub_buffer_processor_;
-        // message_processor_base &message_processor_;
         std::chrono::time_point<std::chrono::steady_clock> start_time_;
         std::chrono::time_point<std::chrono::steady_clock> stop_time_;
         std::size_t bytes_processed_;
