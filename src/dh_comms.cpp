@@ -106,13 +106,14 @@ namespace dh_comms
 
     dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                        bool verbose,
-                       bool install_default_handlers, dh_comms_mem_mgr *mgr)
+                       bool install_default_handlers, dh_comms_mem_mgr *mgr,
+                       bool handlers_pass_through)
         : mgr_(mgr ? mgr : &default_mgr_),
           rsrc_(no_sub_buffers, sub_buffer_capacity, *mgr_),
           dev_rsrc_p_(clone_to_device(rsrc_.desc_, *mgr_)),
           running_(false),
           verbose_(verbose),
-          message_handler_chain_(),
+          message_handler_chain_(handlers_pass_through),
           sub_buffer_processor_(),
           start_time_(),
           stop_time_()

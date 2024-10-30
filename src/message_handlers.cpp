@@ -5,7 +5,13 @@ namespace dh_comms
 {
     message_handler_base::~message_handler_base() {}
 
-    size_t message_handler_chain_t::size() const{
+    message_handler_chain_t::message_handler_chain_t(bool pass_through)
+        : pass_through_(pass_through)
+    {
+    }
+
+    size_t message_handler_chain_t::size() const
+    {
         return message_handlers_.size();
     }
 
@@ -13,7 +19,7 @@ namespace dh_comms
     {
         for (auto &mh : message_handlers_)
         {
-            if (mh->handle(message))
+            if (mh->handle(message) and not pass_through_)
             {
                 return true;
             }
@@ -28,7 +34,7 @@ namespace dh_comms
 
     void message_handler_chain_t::report()
     {
-        for(auto& mh: message_handlers_)
+        for (auto &mh : message_handlers_)
         {
             mh->report();
         }
@@ -36,7 +42,7 @@ namespace dh_comms
 
     void message_handler_chain_t::clear_handler_states()
     {
-        for(auto& mh: message_handlers_)
+        for (auto &mh : message_handlers_)
         {
             mh->clear();
         }
