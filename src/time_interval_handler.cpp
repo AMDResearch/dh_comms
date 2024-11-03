@@ -12,7 +12,7 @@ time_interval_handler_t::time_interval_handler_t(bool verbose)
       verbose_(verbose) {}
 
 bool time_interval_handler_t::handle(const message_t &message) {
-  if ((message_type)message.wave_header().user_type != message_type::time_interval) {
+  if (message.wave_header().user_type != message_type::time_interval) {
     if (verbose_) {
       printf("time_interval_handler: skipping message with user type 0x%x\n", message.wave_header().user_type);
     }

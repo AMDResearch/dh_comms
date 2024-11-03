@@ -13,7 +13,7 @@ memory_heatmap_t::memory_heatmap_t(size_t page_size, bool verbose)
       page_size_(page_size) {}
 
 bool memory_heatmap_t::handle(const message_t &message) {
-  if ((message_type)message.wave_header().user_type != message_type::address) {
+  if (message.wave_header().user_type != message_type::address) {
     if (verbose_) {
       printf("memory_heatmap: skipping message with user type 0x%x\n", message.wave_header().user_type);
     }

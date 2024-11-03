@@ -289,9 +289,16 @@ s_submit_wave_header(dh_comms_descriptor *rsrc) //!< Pointer to dh_comms device 
   s_submit_message(rsrc);
 }
 
-__attribute__((used)) extern "C" __device__ inline void v_submit_address(dh_comms_descriptor *rsrc, void *address,
-                                                                         uint32_t src_loc_idx = 0xffffffff) {
-  v_submit_message(rsrc, &address, sizeof(void *), src_loc_idx, 0);
+__attribute__((used)) extern "C" __device__ inline void
+v_submit_address(dh_comms_descriptor *rsrc, void *address, uint32_t src_loc_idx,
+                 uint8_t rw_kind,           // use 2 bits: 0b01 = read, 0b10 = write, 0b11 = modify (e.g., atomic add)
+                 uint8_t memory_space,      // use 4 bits (don't need that many on current hardware)
+                 uint16_t sizeof_pointee) { // use 26 bits (unlikely large for GPU code)
+  uint32_t user_type = message_type::address;
+  uint32_t user_data = rw_kind & 0b11;
+  user_data |= ((memory_space & 0xf) << 2);
+  user_data |= (sizeof_pointee << 6);
+  v_submit_message(rsrc, &address, sizeof(void *), src_loc_idx, user_type, user_data);
 }
 
 __attribute__((used)) extern "C" __device__ inline void

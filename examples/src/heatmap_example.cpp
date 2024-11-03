@@ -33,8 +33,10 @@ __global__ void test(float *dst, float *src, float alpha, size_t array_size, dh_
 
   // two vector messages with lane headers and a data item for every active lane.
   // source code line is passed as location index
-  dh_comms::v_submit_address(rsrc, src + idx, __LINE__);
-  dh_comms::v_submit_address(rsrc, dst + idx, __LINE__);
+  dh_comms::v_submit_address(rsrc, src + idx, __LINE__, dh_comms::memory_access::read, dh_comms::address_space::global,
+                             sizeof(float));
+  dh_comms::v_submit_address(rsrc, dst + idx, __LINE__, dh_comms::memory_access::write, dh_comms::address_space::global,
+                             sizeof(float));
   time_interval.stop = __clock64(); // time in cycles
   s_submit_time_interval(rsrc, &time_interval);
 }
