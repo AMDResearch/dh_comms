@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 
 namespace dh_comms {
 //! \brief Messages start with a wave header containing information that partains to the whole wave.
@@ -87,5 +88,7 @@ struct lane_header_t {
   //! Lane header constructor; creates a lane header from raw bytes
   lane_header_t(const char *lane_header_p);
 };
+
+std::vector<size_t> get_lane_ids_of_active_lanes(const wave_header_t &wave_header);
 
 } // namespace dh_comms

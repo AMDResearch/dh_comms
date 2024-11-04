@@ -60,6 +60,9 @@ int main() {
     // clear them
     set_indices(indices, {{0, 0}, {1, 32}, {8, 64}}, true);
     test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
+    CHK_HIP_ERR(hipDeviceSynchronize());
+    set_indices(indices, {{0, 96}, {1, 128}, {8, 160}}, true);
+    test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
     // make sure kernels are done before stopping dh_comms, or device messages will get lost
     CHK_HIP_ERR(hipDeviceSynchronize());
     dh_comms.stop();
