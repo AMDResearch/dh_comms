@@ -39,7 +39,8 @@ add_subdirectory(doc)
 
 set(DH_COMMS_SUPPORTED_ARCHS gfx906 gfx908 gfx90a gfx940 gfx941 gfx942)
 foreach(arch ${DH_COMMS_SUPPORTED_ARCHS})
-    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_BINARY_DIR}/lib/dh_comms_dev.${arch}.bc)
+    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_BINARY_DIR}/lib/dh_comms_dev.co4.${arch}.bc)
+    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_BINARY_DIR}/lib/dh_comms_dev.co5.${arch}.bc)
     list(APPEND DH_COMMS_OFFLOAD_ARCHS "--offload-arch=${arch}")
 endforeach()
 
