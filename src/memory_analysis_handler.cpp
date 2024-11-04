@@ -32,6 +32,28 @@ bool memory_analysis_handler_t::handle(const message_t &message) {
     }
     return false;
   }
+
+  uint8_t rw_kind = message.wave_header().user_data & 0b11;
+  if (verbose_) {
+    switch (rw_kind) {
+    case memory_access::undefined:
+      printf("memory access: undefined\n");
+      break;
+    case memory_access::read:
+      printf("memory access: read\n");
+      break;
+    case memory_access::write:
+      printf("memory access: write\n");
+      break;
+    case memory_access::read_write:
+      printf("memory access: read_write\n");
+      break;
+    default:
+      printf("memory access: invalid\n");
+      break;
+    }
+  }
+
   assert(message.data_item_size() == sizeof(uint64_t));
   uint64_t exec = message.wave_header().exec;
   size_t lane_id = 64;
