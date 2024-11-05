@@ -1,5 +1,7 @@
 #include "memory_analysis_handler.h"
 
+#include "utils.h"
+
 #include <cassert>
 
 namespace {
@@ -43,7 +45,8 @@ void conflict_set::clear() {
 }
 
 memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
-    : conflict_sets(),
+    : bank_conflict_counts(),
+      conflict_sets(),
       verbose_(verbose) {
   conflict_sets.insert({1, std::vector<conflict_set>{
                                conflict_set{std::vector<std::pair<size_t, size_t>>{{0, 32}}},
@@ -105,6 +108,24 @@ bool memory_analysis_handler_t::handle(const message_t &message) {
   return false;
 }
 
+const std::map<uint8_t, const char *> rw2str_map = {
+    {memory_access::undefined, "unspecified memory operation"},
+    {memory_access::read, "read"},
+    {memory_access::write, "write"},
+    {memory_access::read_write, "read/write"},
+};
+
+std::string rw2str(uint8_t rw_kind) {
+  std::string rw_string;
+  const auto &rw_s = rw2str_map.find(rw_kind);
+  if (rw_s != rw2str_map.end()) {
+    rw_string = rw_s->second;
+  } else {
+    rw_string = "[coding error: invalid encoding of memory operation type]";
+  }
+  return rw_string;
+}
+
 bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &message) {
   assert(message.data_item_size() == sizeof(uint64_t));
   auto lane_ids_of_active_lanes = get_lane_ids_of_active_lanes(message.wave_header());
@@ -134,36 +155,42 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
   }
 
   if (verbose_) {
-    std::string rw_string;
-    switch (rw_kind) {
-    case memory_access::undefined:
-      rw_string = "undefined memory operation";
-      break;
-    case memory_access::read:
-      rw_string = "read";
-      break;
-    case memory_access::write:
-      rw_string = "write";
-      break;
-    case memory_access::read_write:
-      rw_string = "read/write";
-      break;
-    default:
-      rw_string = "invalid memory operation";
-      break;
-    }
-    printf("location %u: %s of %u bytes/lane, execution mask = 0x%zx, %zu bank conflicts\n",
-           message.wave_header().src_loc_idx, rw_string.c_str(), data_size, message.wave_header().exec,
-           bank_conflict_count);
+    std::string rw_string = rw2str(rw_kind);
+    printf("location %u:\n\t%s of %u bytes/lane, %zu bank conflicts\n\texecution mask = %s\n",
+           message.wave_header().src_loc_idx, rw_string.c_str(), data_size, bank_conflict_count,
+           exec2binstr(message.wave_header().exec).c_str());
   }
 
-  // TODO: add bank conflict count to aggregate data structure.
+  counts_t &counts = bank_conflict_counts[message.wave_header().src_loc_idx][rw_kind][data_size];
+  ++counts.no_accesses;
+  counts.no_conflicts += bank_conflict_count;
 
   return true;
 }
 
-void memory_analysis_handler_t::report() { printf("nothing to report yet, stay tuned...\n"); }
+void memory_analysis_handler_t::report() {
+  printf("\n=== Bank conflicts report =========================\n");
+  bool found_conflicts = false;
+  for (const auto &[loc, rw2s2c] : bank_conflict_counts) {
+    for (const auto &[rw_kind, s2c] : rw2s2c) {
+      for (const auto &[size, counts] : s2c) {
+        if (counts.no_conflicts != 0) {
+          if (!found_conflicts) {
+            printf("bank conflicts for location %u\n", loc);
+            found_conflicts = true;
+          }
+          std::string rw_string = rw2str(rw_kind);
+          printf("\t%s of %u bytes/lane: executed %zu times, %zu total bank conflict(s)\n", rw_string.c_str(), size,
+                 counts.no_accesses, counts.no_conflicts);
+        }
+      }
+    }
+  }
+  if (!found_conflicts) {
+    printf("No bank conflicts found\n");
+  }
+  printf("=== End of bank conflicts report ====================\n");
+}
 
-void memory_analysis_handler_t::clear() {}
-
+void memory_analysis_handler_t::clear() { bank_conflict_counts.clear(); }
 } // namespace dh_comms

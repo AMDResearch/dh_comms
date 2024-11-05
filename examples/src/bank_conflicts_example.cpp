@@ -10,6 +10,10 @@
 
 __global__ void test_uint32_t(int *indices, uint32_t *sink, dh_comms::dh_comms_descriptor *rsrc) {
   __shared__ uint32_t lds[64 * 1024 / sizeof(uint32_t)];
+  lds[threadIdx.x] = threadIdx.x;
+  dh_comms::v_submit_address(rsrc, lds + threadIdx.x, __LINE__, dh_comms::memory_access::write,
+                             dh_comms::address_space::shared, sizeof(uint32_t));
+
   int idx = indices[threadIdx.x];
   if (idx == -1) {
     return;
@@ -64,6 +68,13 @@ int main() {
     set_indices(indices, {{0, 96}, {1, 128}, {8, 160}}, true);
     test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
     // make sure kernels are done before stopping dh_comms, or device messages will get lost
+    CHK_HIP_ERR(hipDeviceSynchronize());
+    dh_comms.stop();
+    dh_comms.report();
+
+    dh_comms.start();
+    set_indices(indices, {{12, 192}, {13, 224}, {32, 192}, {33, 224}, {34, 0}}, true);
+    test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
     CHK_HIP_ERR(hipDeviceSynchronize());
     dh_comms.stop();
     dh_comms.report();

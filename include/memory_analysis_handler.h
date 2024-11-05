@@ -32,6 +32,15 @@ private:
   bool handle_bank_conflict_analysis(const message_t &message);
 
 private:
+  struct counts_t {
+    size_t no_accesses = 0;
+    size_t no_conflicts = 0;
+  };
+  using s2c_t = std::map<uint8_t, counts_t>;       // maps size of the LDS reads/writes to bank conflict counts
+  using rw2s2c_t = std::map<uint8_t, s2c_t>;       // maps operation type (read/write) to s2c_t;
+  using l2rw2s2c_t = std::map<uint32_t, rw2s2c_t>; // maps location identifier to rw2s2c_t
+  l2rw2s2c_t bank_conflict_counts;
+
   std::map<std::size_t, std::vector<conflict_set>> conflict_sets;
   bool verbose_;
 };
