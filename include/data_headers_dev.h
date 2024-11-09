@@ -2,6 +2,7 @@
 
 #include "data_headers.h"
 #include "hip_utils.h"
+#include "message.h"
 
 namespace dh_comms {
 __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message,
@@ -19,7 +20,8 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
       block_idx_x(blockIdx.x),
       block_idx_y(blockIdx.y),
       block_idx_z(blockIdx.z),
-      wave_num(__wave_num()) {
+      wave_num(__wave_num()),
+      arch(gcnarch::unsupported) { // We'll check if the arch is supported in the constructor body.
   // for pre-MI300 hardware that isn't partitioned into XCCx, we set the xcc_id to zero. For
   // the MI300 variants (gfx94[012], we query the hardware registers to find out where on the
   // device we are running. Documentation of the hardware registers can be found in Section
@@ -37,6 +39,20 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
   asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
   se_id = ((cu_se_reg >> 13) & 0x7);
   cu_id = (cu_se_reg >> 8) & 0xf;
+
+#if defined(__gfx906__)
+  arch = gcnarch::gfx906;
+#elif defined(__gfx908__)
+  arch = gcnarch::gfx908;
+#elif defined(__gfx90a__)
+  arch = gcnarch::gfx90a;
+#elif defined(__gfx940__)
+  arch = gcnarch::gfx940;
+#elif defined(__gfx941__)
+  arch = gcnarch::gfx941;
+#elif defined(__gfx942__)
+  arch = gcnarch::gfx942;
+#endif
 }
 
 __device__ inline lane_header_t::lane_header_t() {

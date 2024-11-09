@@ -59,6 +59,7 @@ struct wave_header_t {
   uint16_t se_id : 3;    //!< Number of the SE of the XCC on which the wavefront runs.
   uint16_t cu_id : 4;    //!< Number of the CU of the SE on which the wavefront runs.
   uint16_t unused16 : 1; //!< Padding; reserved for future use.
+  uint8_t arch;          // architecture of the device we're running on
 
   //! Wave header constructor; wave header members for which there is no corresponding
   //! constructor argument are detected and assigned by the constructor.

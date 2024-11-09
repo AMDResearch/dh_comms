@@ -8,23 +8,16 @@
 #include <hip/hip_runtime.h>
 #include <string>
 
-__global__ void test_uint32_t(int *indices, uint32_t *sink, dh_comms::dh_comms_descriptor *rsrc) {
-  __shared__ uint32_t lds[64 * 1024 / sizeof(uint32_t)];
-  lds[threadIdx.x] = threadIdx.x;
-  dh_comms::v_submit_address(rsrc, lds + threadIdx.x, __LINE__, dh_comms::memory_access::write,
-                             dh_comms::address_space::shared, sizeof(uint32_t));
-
+__global__ void test_uint64_t(int *indices, uint64_t *memory, dh_comms::dh_comms_descriptor *rsrc) {
   int idx = indices[threadIdx.x];
+  dh_comms::v_submit_address(rsrc, indices + threadIdx.x, __LINE__, dh_comms::memory_access::read,
+                             dh_comms::address_space::global, sizeof(int));
   if (idx == -1) {
     return;
   }
-  uint32_t garbage = lds[idx];
-  dh_comms::v_submit_address(rsrc, lds + idx, __LINE__, dh_comms::memory_access::read, dh_comms::address_space::shared,
-                             sizeof(uint32_t));
-  garbage += lds[idx + 64];
-  dh_comms::v_submit_address(rsrc, lds + idx + 64, __LINE__, dh_comms::memory_access::read,
-                             dh_comms::address_space::shared, sizeof(uint32_t));
-  *sink = garbage;
+  memory[idx] = 0;
+  dh_comms::v_submit_address(rsrc, memory + idx, __LINE__, dh_comms::memory_access::write,
+                             dh_comms::address_space::global, sizeof(uint64_t));
 }
 
 void set_indices(int *indices, const std::vector<std::pair<int, int>> &kvs, bool clear = false) {
@@ -55,8 +48,8 @@ int main() {
   for (std::size_t i = 0; i != 64; ++i) {
     indices[i] = -1;
   }
-  void *sink;
-  CHK_HIP_ERR(hipMalloc(&sink, 32));
+  void *memory;
+  CHK_HIP_ERR(hipMalloc(&memory, 64 * 1024));
 
   {
     dh_comms::dh_comms dh_comms(no_sub_buffers, sub_buffer_capacity, verbose);
@@ -66,10 +59,10 @@ int main() {
     // device code notifies host code to process the full buffers and
     // clear them
     set_indices(indices, {{0, 0}, {1, 32}, {8, 64}}, true);
-    test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
+    test_uint64_t<<<no_blocks, blocksize>>>(indices, (uint64_t *)memory, dh_comms.get_dev_rsrc_ptr());
     CHK_HIP_ERR(hipDeviceSynchronize());
     set_indices(indices, {{0, 96}, {1, 128}, {8, 160}}, true);
-    test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
+    test_uint64_t<<<no_blocks, blocksize>>>(indices, (uint64_t *)memory, dh_comms.get_dev_rsrc_ptr());
     // make sure kernels are done before stopping dh_comms, or device messages will get lost
     CHK_HIP_ERR(hipDeviceSynchronize());
     dh_comms.stop();
@@ -77,12 +70,12 @@ int main() {
 
     dh_comms.start();
     set_indices(indices, {{12, 192}, {13, 224}, {32, 192}, {33, 224}, {34, 0}}, true);
-    test_uint32_t<<<no_blocks, blocksize>>>(indices, (uint32_t *)sink, dh_comms.get_dev_rsrc_ptr());
+    test_uint64_t<<<no_blocks, blocksize>>>(indices, (uint64_t *)memory, dh_comms.get_dev_rsrc_ptr());
     CHK_HIP_ERR(hipDeviceSynchronize());
     dh_comms.stop();
     dh_comms.report();
   }
 
-  CHK_HIP_ERR(hipFree(sink));
+  CHK_HIP_ERR(hipFree(memory));
   CHK_HIP_ERR(hipFree(indices));
 }

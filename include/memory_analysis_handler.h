@@ -30,6 +30,9 @@ public:
 
 private:
   bool handle_bank_conflict_analysis(const message_t &message);
+  bool handle_cache_line_count_analysis(const message_t &message);
+  void report_cache_line_use();
+  void report_bank_conflicts();
 
 private:
   struct counts_t {
@@ -42,6 +45,16 @@ private:
   l2rw2s2c_t bank_conflict_counts;
 
   std::map<std::size_t, std::vector<conflict_set>> conflict_sets;
+
+  struct access_counts_t {
+    size_t no_accesses = 0;
+    size_t min_cache_lines_needed;
+    size_t cache_lines_used;
+  };
+  using s2ac_t = std::map<uint8_t, access_counts_t>; // maps size of the global reads/writes to cache line use counts
+  using rw2s2ac_t = std::map<uint8_t, s2ac_t>;       // maps operation type (read/write) to s2ac_t;
+  using l2rw2s2ac_t = std::map<uint32_t, rw2s2ac_t>; // maps location identifier to rw2s2ac_t
+  l2rw2s2ac_t cache_line_use_counts;
   bool verbose_;
 };
 } // namespace dh_comms
