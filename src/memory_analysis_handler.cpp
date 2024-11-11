@@ -168,13 +168,36 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   }
   uint64_t cache_lines_used = cache_lines.size();
 
-  if (verbose_) {
+  if (verbose_ and (cache_lines_used != min_cache_lines_needed)) {
     std::string rw_string = rw2str(rw_kind);
-    printf("location %u: global memory access\n"
+    printf("location %u: global memory access by %zu lanes:\n"
            "\t%s of %u bytes/lane, minimum L2 cache lines required %zu, cache lines used %zu\n"
            "\texecution mask = %s\n",
-           message.wave_header().src_loc_idx, rw_string.c_str(), data_size, min_cache_lines_needed, cache_lines_used,
-           exec2binstr(message.wave_header().exec).c_str());
+           message.wave_header().src_loc_idx, message.no_data_items(), rw_string.c_str(), data_size,
+           min_cache_lines_needed, cache_lines_used, exec2binstr(message.wave_header().exec).c_str());
+    auto lane_ids_of_active_lanes = get_lane_ids_of_active_lanes(message.wave_header());
+    printf("\n\tAddresses accessed (lane: address)");
+    constexpr size_t addresses_per_line = 4;
+    size_t addresses_printed = 0;
+    for (size_t i = 0; i != lane_ids_of_active_lanes.size(); ++i) {
+      if (addresses_printed % addresses_per_line == 0) {
+        printf("\n\t");
+      }
+      ++addresses_printed;
+      size_t lane = lane_ids_of_active_lanes[i];
+      uint64_t address = *(const uint64_t *)message.data_item(i);
+      printf("%2zu: 0x%lx   ", lane, address);
+    }
+    printf("\n\n\tCache line size = 0x%hhx. Lowest addresses on cache lines used:", L2_cache_line_size);
+    addresses_printed = 0;
+    for (const auto cl : cache_lines) {
+      if (addresses_printed % addresses_per_line == 0) {
+        printf("\n\t");
+      }
+      printf("%2zu: 0x%lx   ", addresses_printed, cl * L2_cache_line_size);
+      ++addresses_printed;
+    }
+    printf("\n");
   }
 
   access_counts_t &counts = cache_line_use_counts[message.wave_header().src_loc_idx][rw_kind][data_size];
