@@ -27,7 +27,7 @@ void set_indices(int *indices, const std::vector<std::pair<int, int>> &kvs, bool
     }
   }
   for (auto kv : kvs) {
-    assert(kv.first >= -11 and kv.first < 64);
+    assert(kv.first >= -1 and kv.first < 64);
     indices[kv.first] = kv.second;
   }
 }
