@@ -1,6 +1,7 @@
 #include "dh_comms.h"
 
 #include "data_headers.h"
+#include "dh_comms_dev.h"
 #include "hip_utils.h"
 #include "memory_heatmap.h"
 #include "message.h"
