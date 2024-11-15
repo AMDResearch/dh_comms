@@ -22,7 +22,7 @@ add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
 target_include_directories(dh_comms PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
-set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 
 file(GLOB_RECURSE DH_COMMS_INCLUDE_FILES "include/*.h")
 set_target_properties(dh_comms PROPERTIES PUBLIC_HEADER "${DH_COMMS_INCLUDE_FILES}")
