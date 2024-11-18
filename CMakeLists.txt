@@ -22,7 +22,7 @@ add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
 target_include_directories(dh_comms PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
-set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 
 file(GLOB_RECURSE DH_COMMS_INCLUDE_FILES "include/*.h")
 set_target_properties(dh_comms PROPERTIES PUBLIC_HEADER "${DH_COMMS_INCLUDE_FILES}")
@@ -50,10 +50,10 @@ add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
     COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
-            -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
+            -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co4.gfx/'` \; done
     COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
-            -O3 -mcode-object-version=5 -x hip -c -save-temps ${CMAKE_SOURCE_DIR}/include/dh_comms_dev.h
+            -O3 -mcode-object-version=5 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co5.gfx/'` \; done
     COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
     COMMAND touch dh_comms_bc.stamp
