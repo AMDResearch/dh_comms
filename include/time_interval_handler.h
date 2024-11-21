@@ -7,6 +7,10 @@ struct time_interval {
   uint64_t stop;
 };
 
+//! The time_interval_handler class processes time interval messages. It Keeps
+//! track of the sum of the time covered by the messages as well as the total
+//! elapsed time between the earliest start time in any message and the latest
+//! stop time in any message.
 class time_interval_handler_t : public message_handler_base {
 public:
   time_interval_handler_t(bool verbose);

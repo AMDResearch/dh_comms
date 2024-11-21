@@ -25,6 +25,7 @@ const uint8_t L2_cache_line_sizes[] = {
 
 namespace dh_comms {
 
+// See memory_analysis_handler.h for an explanation of conflict sets.
 conflict_set::conflict_set(const std::vector<std::pair<std::size_t, std::size_t>> &fl_pairs)
     : lanes(),
       banks(std::vector<std::set<uint64_t>>(32)) {

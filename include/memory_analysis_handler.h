@@ -50,7 +50,6 @@ private:
   std::vector<std::set<uint64_t>> banks;
 };
 
-
 //! The memory_analysis_handler_t class handles messages with address data. If these
 //! are global memory addresses, the total number of cache lines needed to access the
 //! addresses for all active lanes in the wavefront is compared to the optimal number of
@@ -79,11 +78,12 @@ private:
   using s2c_t = std::map<uint8_t, counts_t>;       //!< maps size of the LDS reads/writes to bank conflict counts
   using rw2s2c_t = std::map<uint8_t, s2c_t>;       //!< maps operation type (read/write) to s2c_t;
   using l2rw2s2c_t = std::map<uint32_t, rw2s2c_t>; //!< maps location identifier to rw2s2c_t
-  //! bank conflict counts are tracked for each location, memory access type (read or write), and size of the
+  //! Bank conflict counts are tracked for each location, memory access type (read or write), and size of the
   //! access. For each combination, we keep track of how often there was an access, and how many bank conflicts
   //! occurred.
   l2rw2s2c_t bank_conflict_counts;
 
+  //! Maps each of the supported memory access sizes to the conflict sets for that size
   std::map<std::size_t, std::vector<conflict_set>> conflict_sets;
 
   struct access_counts_t {
@@ -94,6 +94,10 @@ private:
   using s2ac_t = std::map<uint8_t, access_counts_t>; // maps size of the global reads/writes to cache line use counts
   using rw2s2ac_t = std::map<uint8_t, s2ac_t>;       // maps operation type (read/write) to s2ac_t;
   using l2rw2s2ac_t = std::map<uint32_t, rw2s2ac_t>; // maps location identifier to rw2s2ac_t
+  //! Cache line counts are tracked for each location, memory access type (read or write), and the size of the access.
+  //! For each combination, we keep track of how often there was an access, what the minimum number of cache lines
+  //! needed was if the data accessed by the active lanes was consecutive and cache line aligned for each access,
+  //! and how many cache lines were actually used
   l2rw2s2ac_t cache_line_use_counts;
   bool verbose_;
 };
