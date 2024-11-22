@@ -27,6 +27,7 @@ void *dh_comms_mem_mgr::alloc(std::size_t size) {
 void *dh_comms_mem_mgr::alloc_device_memory(std::size_t size) {
   void *result = NULL;
   CHK_HIP_ERR(hipMalloc(&result, size));
+  zero_device_memory(result, size);
   return result;
 }
 
@@ -47,10 +48,14 @@ void *dh_comms_mem_mgr::copy(void *dst, void *src, std::size_t size) {
   return dst;
 }
 
-std::size_t dh_comms_mem_mgr::zero(void *buffer, std::size_t size) {
+void dh_comms_mem_mgr::zero(void *buffer, std::size_t size) {
   std::vector<char> zeros(size);
   std::copy(zeros.cbegin(), zeros.cend(), (char *)buffer);
-  return size;
+}
+
+void dh_comms_mem_mgr::zero_device_memory(void *buffer, std::size_t size) {
+  std::vector<char> zeros(size);
+  copy_to_device(buffer, zeros.data(), size);
 }
 } // namespace dh_comms
 
@@ -73,14 +78,17 @@ dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t s
              (decltype(desc_.buffer_))mgr.alloc(no_sub_buffers * sub_buffer_capacity),
              (decltype(desc_.sub_buffer_sizes_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.sub_buffer_sizes_))),
              (decltype(desc_.error_bits_))mgr.alloc(sizeof(decltype(*desc_.error_bits_))),
-             (decltype(desc_.atomic_flags_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_)))}),
+             (decltype(desc_.atomic_flags_d_))mgr.alloc_device_memory(no_sub_buffers *
+                                                                      sizeof(decltype(*desc_.atomic_flags_d_))),
+             (decltype(desc_.atomic_flags_hd_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_hd_)))}),
       mgr_(mgr) {}
 
 dh_comms_resources::~dh_comms_resources() {
-  mgr_.free(desc_.atomic_flags_);
+  mgr_.free(desc_.atomic_flags_hd_);
+  mgr_.free(desc_.atomic_flags_d_);
   mgr_.free(desc_.error_bits_);
   mgr_.free(desc_.sub_buffer_sizes_);
-  mgr_.free(desc_.buffer_);
+  mgr_.free_device_memory(desc_.buffer_);
 }
 
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, bool verbose,
@@ -179,8 +187,8 @@ void dh_comms::processing_loop(bool is_final_loop) {
 
     // in the final processing loop, sub-buffers are either empty or partially filled,
     // but not full, and we expect the flag to be zero.
-    uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_[i], __ATOMIC_ACQUIRE);
-    if (is_final_loop or flag > 1) // process and reset
+    uint8_t flag = __atomic_load_n(&rsrc_.desc_.atomic_flags_hd_[i], __ATOMIC_ACQUIRE);
+    if (is_final_loop or flag == 1) // process and reset
     {
       if (is_final_loop and flag != 0) // Should not happen, indicates a missing atomic release from device code
       {
@@ -200,12 +208,10 @@ void dh_comms::processing_loop(bool is_final_loop) {
       }
 
       rsrc_.desc_.sub_buffer_sizes_[i] = 0;
-      // in case this is not the final processing loop:
-      // setting the flag to either 1 (giving contol back to the signaling wave)
-      // or 0 (allowing any wave to take control of the sub-buffer)
-      // in case this is the final processing loop: set the flag to zero.
-      flag = is_final_loop ? 0 : flag - 2;
-      __atomic_store_n(&rsrc_.desc_.atomic_flags_[i], flag, __ATOMIC_RELEASE);
+      if (!is_final_loop) { // give control over the sub-buffer back to the wave that gave it to us
+        flag = 0;
+        __atomic_store_n(&rsrc_.desc_.atomic_flags_hd_[i], flag, __ATOMIC_RELEASE);
+      }
     }
   }
 }

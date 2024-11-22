@@ -19,7 +19,8 @@ public:
   virtual void free_device_memory(void *);
   virtual void *copy(void *dst, void *src, std::size_t size);
   virtual void *copy_to_device(void *dst, const void *src, std::size_t size);
-  virtual std::size_t zero(void *buffer, std::size_t size);
+  virtual void zero(void *buffer, std::size_t size);
+  virtual void zero_device_memory(void *buffer, std::size_t size);
 };
 
 struct dh_comms_descriptor {
@@ -32,7 +33,8 @@ struct dh_comms_descriptor {
   uint32_t *error_bits_;            //!< Pointer to an array of no_sub_buffers_ entries, one for each sub-buffer,
                                     //!< used to track error conditions for the sub-buffer, such as a wave attempting
                                     //!< to write more than sub_buffer_capacity_ bytes to a sub-buffer.
-  uint8_t *atomic_flags_;
+  uint8_t *atomic_flags_d_;         //!< Used for synchronization between different waves in device code.
+  uint8_t *atomic_flags_hd_;        //!< Used for synchronization between host and device code
 };
 //! \brief Keeps track of resources used by device and host code for exchanging data.
 //!

@@ -40,13 +40,13 @@ __device__ inline size_t get_sub_buffer_idx(size_t no_sub_buffers) {
 }
 
 // Have the calling wave spin on an atomic to get exclusive read/write access to a sub-buffer.
-__device__ inline void wave_acquire(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id) {
+__device__ inline void wave_acquire(uint8_t *atomic_flags_d, size_t sub_buf_idx, unsigned int active_lane_id) {
   if (active_lane_id == 0) // only one lane acquires the lock on behalf of the wave
   {
     uint8_t expected = 0; // 0 -> sub-buffer is not locked
     uint8_t desired = 1;  // 1 -> sub-buffer is locked by (this) wave
     bool weak = false;
-    while (not __atomic_compare_exchange(&atomic_flags[sub_buf_idx], &expected, &desired, weak, __ATOMIC_ACQUIRE,
+    while (not __atomic_compare_exchange(&atomic_flags_d[sub_buf_idx], &expected, &desired, weak, __ATOMIC_ACQUIRE,
                                          __ATOMIC_RELAXED)) {
       // __atomic_compare_exchange returns the value at the address (first argument) in
       // the second argument (expected), so we need to reset it in this spin-loop
@@ -61,13 +61,13 @@ __device__ inline void wave_acquire(uint8_t *atomic_flags, size_t sub_buf_idx, u
 // infinite spin loop for the next call to wave_acquire. Implementing this function
 // with an __atomic_compare_exchange instead resolves the issue for the cases we
 // have seen so far.
-__device__ inline void wave_release(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id) {
+__device__ inline void wave_release(uint8_t *atomic_flags_d, size_t sub_buf_idx, unsigned int active_lane_id) {
   if (active_lane_id == 0) // only one lane acquires the lock on behalf of the wave
   {
     uint8_t expected = 1; // 1 -> sub-buffer is locked by this wave
     uint8_t desired = 0;  // 0 -> sub-buffer is unlocked
     bool weak = false;
-    while (not __atomic_compare_exchange(&atomic_flags[sub_buf_idx], &expected, &desired, weak, __ATOMIC_RELEASE,
+    while (not __atomic_compare_exchange(&atomic_flags_d[sub_buf_idx], &expected, &desired, weak, __ATOMIC_RELEASE,
                                          __ATOMIC_RELAXED)) {
       // __atomic_compare_exchange returns the value at the address (first argument) in
       // the second argument (expected), so we need to reset it in this spin-loop
@@ -76,26 +76,15 @@ __device__ inline void wave_release(uint8_t *atomic_flags, size_t sub_buf_idx, u
   }
 }
 
-// Have the calling wave, which has exclusive read/write access to a sub-buffer, pass its lock
-// on the sub-buffer to the host, such that the host can process and clear the sub-buffer.
-// The argument return_control tells host code whether is should return control back to the calling
-// wave, or if the sub-buffer should be released so that any wave can acquire it.
-__device__ inline void wave_signal_host(uint8_t *atomic_flags, size_t sub_buf_idx, unsigned int active_lane_id,
-                                        bool return_control) {
+// Have the calling wave, which has exclusive read/write access to a sub-buffer, pass control
+// of the sub-buffer to the host by setting a flag to 1, and then spin on the flag until the host
+// resets it to zero, indicating that it is done processing the sub-buffer.
+__device__ inline void wave_signal_host(uint8_t *atomic_flags_hd, size_t sub_buf_idx, unsigned int active_lane_id) {
   if (active_lane_id == 0) // only one lane passes control of the sub-buffer to the host on behalf of the wave
   {
-    uint8_t flag_value = return_control ? 3 : 2;
-    __atomic_store(&atomic_flags[sub_buf_idx], &flag_value, __ATOMIC_RELEASE);
-    // when host code sees a flag value > 1, it starts processing the sub-buffer that
-    // we indicated to be full. Once the host is done, it subtracts 2 from the flag,
-    // i.e., if return_control is true, the flag will be 1 after the host is done,
-    // and this wave will wait for that to take control. Otherwise, if return_control
-    // is false, the host will set the flag to 0, and any wave that wants to write
-    // to the sub-buffer can get control by calling wave_acquire()
-    if (return_control) {
-      // spin until host sets flag to 1, indicating it returns control to this wave
-      while (__atomic_load_n(&atomic_flags[sub_buf_idx], __ATOMIC_ACQUIRE) != 1) {
-      }
+    uint8_t flag = 1;
+    __atomic_store_n(&atomic_flags_hd[sub_buf_idx], flag, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&atomic_flags_hd[sub_buf_idx], __ATOMIC_ACQUIRE) != 0) {
     }
   }
 }
@@ -139,13 +128,13 @@ __device__ inline void generic_submit_message(
   uint64_t rounded_message_size = sizeof(uint32_t) * ((message_size + sizeof(uint32_t) - 1) / sizeof(uint32_t));
   uint64_t data_size = active_lane_count * lane_header_size + submitting_lane_count * rounded_message_size;
 
-  wave_acquire(rsrc->atomic_flags_, sub_buf_idx,
+  wave_acquire(rsrc->atomic_flags_d_, sub_buf_idx,
                active_lane_id); // Get exclusive access to the sub-buffer and associated data
   if (sizeof(wave_header_t) + data_size >
       sub_buffer_capacity) // Sanity check: does the message even fit in an empty sub-buffer?
   {
     *rsrc->error_bits_ |= 1; // If not, set an error bit, don't write any data, and return
-    wave_release(rsrc->atomic_flags_, sub_buf_idx, active_lane_id);
+    wave_release(rsrc->atomic_flags_d_, sub_buf_idx, active_lane_id);
     return;
   }
   size_t current_size = sub_buffer_sizes[sub_buf_idx]; // Does the message fit in the sub-buffer, given the data already
@@ -153,10 +142,9 @@ __device__ inline void generic_submit_message(
   if (current_size + sizeof(wave_header_t) + data_size >
       sub_buffer_capacity) { // If not, tell the host to clear the sub-buffer, and to return control to us when it's
                              // done.
-    bool return_control = true;
-    wave_signal_host(rsrc->atomic_flags_, sub_buf_idx, active_lane_id, return_control);
+    wave_signal_host(rsrc->atomic_flags_hd_, sub_buf_idx, active_lane_id);
     // The host clears the sub-buffer and resets its size to 0. Since it
-    // returns control to us, no other wave can have changed the sub -buffer
+    // returns control to us, no other wave can have changed the sub-buffer
     // size after wave_signal_host returns. So instead of re-reading the size
     // from memory, we can deduce that it must be 0. This saves a slow memory
     // read.
@@ -231,7 +219,7 @@ __device__ inline void generic_submit_message(
   {
     sub_buffer_sizes[sub_buf_idx] += sizeof(wave_header_t) + data_size;
   }
-  wave_release(rsrc->atomic_flags_, sub_buf_idx, active_lane_id);
+  wave_release(rsrc->atomic_flags_d_, sub_buf_idx, active_lane_id);
 }
 
 // End of section to be skipped by Doxygen
