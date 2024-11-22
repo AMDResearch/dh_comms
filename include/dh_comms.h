@@ -13,8 +13,8 @@ class dh_comms_mem_mgr {
 public:
   dh_comms_mem_mgr();
   virtual ~dh_comms_mem_mgr();
-  virtual void *alloc(std::size_t size);
-  virtual void *alloc_device_memory(std::size_t size);
+  virtual void *calloc(std::size_t size);
+  virtual void *calloc_device_memory(std::size_t size);
   virtual void free(void *);
   virtual void free_device_memory(void *);
   virtual void *copy(void *dst, void *src, std::size_t size);

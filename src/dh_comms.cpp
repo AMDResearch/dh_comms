@@ -17,14 +17,14 @@ dh_comms_mem_mgr::dh_comms_mem_mgr() { return; }
 
 dh_comms_mem_mgr::~dh_comms_mem_mgr() {}
 
-void *dh_comms_mem_mgr::alloc(std::size_t size) {
+void *dh_comms_mem_mgr::calloc(std::size_t size) {
   void *buffer;
   CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
   zero((char *)buffer, size);
   return buffer;
 }
 
-void *dh_comms_mem_mgr::alloc_device_memory(std::size_t size) {
+void *dh_comms_mem_mgr::calloc_device_memory(std::size_t size) {
   void *result = NULL;
   CHK_HIP_ERR(hipMalloc(&result, size));
   zero_device_memory(result, size);
@@ -64,7 +64,7 @@ constexpr bool shared_buffers_are_host_pinned = true;
 
 template <typename T> T *clone_to_device(const T &host_data, dh_comms::dh_comms_mem_mgr &mgr) {
   T *device_data;
-  device_data = reinterpret_cast<T *>(mgr.alloc_device_memory(sizeof(T)));
+  device_data = reinterpret_cast<T *>(mgr.calloc_device_memory(sizeof(T)));
   mgr.copy_to_device(device_data, &host_data, sizeof(T));
   return device_data;
 }
@@ -75,12 +75,12 @@ namespace dh_comms {
 dh_comms_resources::dh_comms_resources(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity,
                                        dh_comms_mem_mgr &mgr)
     : desc_({no_sub_buffers, sub_buffer_capacity,
-             (decltype(desc_.buffer_))mgr.alloc(no_sub_buffers * sub_buffer_capacity),
-             (decltype(desc_.sub_buffer_sizes_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.sub_buffer_sizes_))),
-             (decltype(desc_.error_bits_))mgr.alloc(sizeof(decltype(*desc_.error_bits_))),
-             (decltype(desc_.atomic_flags_d_))mgr.alloc_device_memory(no_sub_buffers *
-                                                                      sizeof(decltype(*desc_.atomic_flags_d_))),
-             (decltype(desc_.atomic_flags_hd_))mgr.alloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_hd_)))}),
+             (decltype(desc_.buffer_))mgr.calloc(no_sub_buffers * sub_buffer_capacity),
+             (decltype(desc_.sub_buffer_sizes_))mgr.calloc(no_sub_buffers * sizeof(decltype(*desc_.sub_buffer_sizes_))),
+             (decltype(desc_.error_bits_))mgr.calloc(sizeof(decltype(*desc_.error_bits_))),
+             (decltype(desc_.atomic_flags_d_))mgr.calloc_device_memory(no_sub_buffers *
+                                                                       sizeof(decltype(*desc_.atomic_flags_d_))),
+             (decltype(desc_.atomic_flags_hd_))mgr.calloc(no_sub_buffers * sizeof(decltype(*desc_.atomic_flags_hd_)))}),
       mgr_(mgr) {}
 
 dh_comms_resources::~dh_comms_resources() {
