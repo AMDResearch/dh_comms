@@ -126,6 +126,17 @@ bool memory_analysis_handler_t::handle(const message_t &message) {
   return false;
 }
 
+bool memory_analysis_handler_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb)
+{
+    // This if block is just to get the compiler to quick throwing errors for unused parameters
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    return handle(message);
+}
+
 const std::map<uint8_t, const char *> rw2str_map = {
     {memory_access::undefined, "unspecified memory operation"},
     {memory_access::read, "read"},

@@ -12,6 +12,15 @@ memory_heatmap_t::memory_heatmap_t(size_t page_size, bool verbose)
     : verbose_(verbose),
       page_size_(page_size) {}
 
+bool memory_heatmap_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) {
+    // This if block is just to get the compiler to quick throwing errors for unused parameters
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    return handle(message);
+}
 bool memory_heatmap_t::handle(const message_t &message) {
   if (message.wave_header().user_type != message_type::address) {
     if (verbose_) {

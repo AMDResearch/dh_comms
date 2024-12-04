@@ -91,6 +91,13 @@ dh_comms_resources::~dh_comms_resources() {
   mgr_.free_device_memory(desc_.buffer_);
 }
 
+dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, kernelDB::kernelDB *kdb, bool verbose,
+                   bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through) :
+                   dh_comms(no_sub_buffers, sub_buffer_capacity, verbose, install_default_handlers, mgr, handlers_pass_through)
+{
+    kdb_ = kdb;
+}
+
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, bool verbose,
                    bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through)
     : mgr_(mgr ? mgr : &default_mgr_),
@@ -101,7 +108,8 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       message_handler_chain_(handlers_pass_through),
       sub_buffer_processor_(),
       start_time_(),
-      stop_time_() {
+      stop_time_()
+{
   if (install_default_handlers) {
     install_default_message_handlers();
   }
@@ -136,6 +144,12 @@ void dh_comms::start() {
   start_time_ = std::chrono::steady_clock::now();
   bytes_processed_ = 0;
   sub_buffer_processor_ = std::thread(&dh_comms::process_sub_buffers, this);
+}
+
+void dh_comms::start(const std::string& kernel_name)
+{
+    kernel_name_ = kernel_name;
+    start();
 }
 
 void dh_comms::stop() {
@@ -201,7 +215,7 @@ void dh_comms::processing_loop(bool is_final_loop) {
       char *message_p = &rsrc_.desc_.buffer_[byte_offset];
       while (size != 0 and message_handler_chain_.size() != 0) {
         message_t message(message_p);
-        message_handler_chain_.handle(message);
+        message_handler_chain_.handle(message, kernel_name_, *kdb_);
         assert(message.size() <= size);
         size -= message.size();
         message_p += message.size();

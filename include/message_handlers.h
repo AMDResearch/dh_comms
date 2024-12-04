@@ -1,6 +1,7 @@
 #pragma once
 
 #include "message.h"
+#include "kerneldb/kernelDB.h"
 
 #include <memory>
 #include <vector>
@@ -24,6 +25,7 @@ public:
   //! A derived class implementing handle() must handle a message if it can and return
   //! true, or, if it cannot handle the message, return false.
   virtual bool handle(const message_t &message) = 0;
+  virtual bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb) = 0;
   //! Stateful message handlers that aggregate data during message processing may want to report
   //! the data when done. They may do so by overriding this function. Not all message handlers
   //! may need to report data in the end, e.g., stateless message handlers that just save messages to disk
@@ -46,6 +48,7 @@ public:
 
   size_t size() const;
   bool handle(const message_t &message);
+  bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb);
   void add_handler(std::unique_ptr<message_handler_base> &&message_handler);
   void report();
   void clear_handler_states(); //!< Keeps the handlers, but clears their states

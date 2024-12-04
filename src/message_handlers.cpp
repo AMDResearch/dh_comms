@@ -19,6 +19,15 @@ bool message_handler_chain_t::handle(const message_t &message) {
   return false;
 }
 
+bool message_handler_chain_t::message_handler_chain_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) {
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    return handle(message);
+}
+
 void message_handler_chain_t::add_handler(std::unique_ptr<message_handler_base> &&message_handler) {
   message_handlers_.push_back(std::move(message_handler));
 }

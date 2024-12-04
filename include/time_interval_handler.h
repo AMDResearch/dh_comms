@@ -17,6 +17,7 @@ public:
   time_interval_handler_t(const time_interval_handler_t &) = default;
   virtual ~time_interval_handler_t() = default;
   virtual bool handle(const message_t &message) override;
+  virtual bool handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) override;
   virtual void report() override;
   virtual void clear() override;
 

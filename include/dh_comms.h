@@ -7,6 +7,7 @@
 #include <functional>
 #include <thread>
 #include <vector>
+#include "kerneldb/kernelDB.h"
 
 namespace dh_comms {
 class dh_comms_mem_mgr {
@@ -60,6 +61,11 @@ class dh_comms {
 public:
   dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
            std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
+           kernelDB::kernelDB *kdb,
+           bool verbose = false,            //!< Controls how chatty the code is.
+           bool install_default_handlers = false, dh_comms_mem_mgr *mgr = NULL, bool handlers_pass_through = true);
+  dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
+           std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
            bool verbose = false,            //!< Controls how chatty the code is.
            bool install_default_handlers = false, dh_comms_mem_mgr *mgr = NULL, bool handlers_pass_through = true);
   ~dh_comms();
@@ -68,6 +74,7 @@ public:
   dh_comms_descriptor *get_dev_rsrc_ptr(); //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
   void start(); //!< Start the message processing threads on the host.
+  void start(const std::string& kernel_name); //!< Start the message processing threads on the host.
   void stop();  //!< \brief Stop message processing on the host.
                 //!<
                 //!< It is the responsibility
@@ -106,6 +113,8 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> start_time_;
   std::chrono::time_point<std::chrono::steady_clock> stop_time_;
   std::size_t bytes_processed_;
+  std::string kernel_name_;
+  kernelDB::kernelDB *kdb_;
 };
 
 } // namespace dh_comms

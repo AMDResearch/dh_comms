@@ -17,10 +17,30 @@ set(DH_COMMS_SOURCES
     src/memory_analysis_handler.cpp
     src/dummy_kernel.cpp
 )
+
+list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
+include(env)
+
+link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/kernelDB/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
-target_include_directories(dh_comms PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories (
+    dh_comms 
+  PRIVATE 
+    ${CMAKE_SOURCE_DIR}/include 
+    ${CMAKE_INSTALL_PREFIX}/include
+    ${ROCM_ROOT_DIR}/include
+    ${ROOT_DIR}
+    ${HSA_RUNTIME_INC_PATH}
+    ${HSA_KMT_LIB_PATH}/..
+    )
+target_link_libraries(
+    dh_comms 
+PRIVATE 
+    kernelDB64
+)
+
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
 set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 
@@ -50,9 +70,9 @@ add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
     COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
-            -O3 -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+            -O3 -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co4.gfx/'` \; done
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS} -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
             -O3 -mcode-object-version=5 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co5.gfx/'` \; done
     COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
