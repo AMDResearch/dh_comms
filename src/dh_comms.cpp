@@ -110,6 +110,7 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       start_time_(),
       stop_time_()
 {
+  kdb_ = nullptr;
   if (install_default_handlers) {
     install_default_message_handlers();
   }
@@ -215,7 +216,10 @@ void dh_comms::processing_loop(bool is_final_loop) {
       char *message_p = &rsrc_.desc_.buffer_[byte_offset];
       while (size != 0 and message_handler_chain_.size() != 0) {
         message_t message(message_p);
-        message_handler_chain_.handle(message, kernel_name_, *kdb_);
+        if (kdb_)
+            message_handler_chain_.handle(message, kernel_name_, *kdb_);
+        else
+            message_handler_chain_.handle(message);
         assert(message.size() <= size);
         size -= message.size();
         message_p += message.size();
