@@ -20,12 +20,12 @@ bool message_handler_chain_t::handle(const message_t &message) {
 }
 
 bool message_handler_chain_t::message_handler_chain_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) {
-    if (kernel_name.length() == 0)
-    {
-        std::vector<uint32_t> lines;
-        kdb.getKernelLines(kernel_name, lines);
+  for (auto &mh : message_handlers_) {
+    if (mh->handle(message, kernel_name, kdb) and not pass_through_) {
+      return true;
     }
-    return handle(message);
+  }
+  return false;
 }
 
 void message_handler_chain_t::add_handler(std::unique_ptr<message_handler_base> &&message_handler) {
