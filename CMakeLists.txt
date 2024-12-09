@@ -20,11 +20,17 @@ set(DH_COMMS_SOURCES
 
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 include(env)
-
+message ("Checking kerneldb_INCLUDE_DIRS: ${kerneldb_INCLUDE_DIRS}")
+# TB: Line below is only needed in "standalone" build scenario
 link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/kernelDB/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
+
+# TB: Check if kernelDB variables (from superbuild CMake) are set. These will
+#     be called "kerneldb_INCLUDE_DIRS" and "kerneldb_LIBRARIES":
+#       - if yes, use them to link kernelDB
+#       - if no, use the default path
 target_include_directories (
     dh_comms 
   PRIVATE 
@@ -34,7 +40,8 @@ target_include_directories (
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
     ${HSA_KMT_LIB_PATH}/..
-    )
+    ${kerneldb_INCLUDE_DIRS}
+)
 target_link_libraries(
     dh_comms 
 PRIVATE 
@@ -70,9 +77,9 @@ add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
     COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
-            -O3 -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+            -O3 -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} -I${kerneldb_INCLUDE_DIRS} -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co4.gfx/'` \; done
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS} -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS} -I${CMAKE_INSTALL_PREFIX}/include -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} -I${kerneldb_INCLUDE_DIRS}
             -O3 -mcode-object-version=5 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
     COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co5.gfx/'` \; done
     COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
