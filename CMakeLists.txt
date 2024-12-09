@@ -20,7 +20,7 @@ set(DH_COMMS_SOURCES
 
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 include(env)
-message ("Checking kerneldb_INCLUDE_DIRS: ${kerneldb_INCLUDE_DIRS}")
+
 # TB: Line below is only needed in "standalone" build scenario
 link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/kernelDB/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
