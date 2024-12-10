@@ -21,16 +21,11 @@ set(DH_COMMS_SOURCES
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 include(env)
 
-# TB: Line below is only needed in "standalone" build scenario
 link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/kernelDB/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
 
-# TB: Check if kernelDB variables (from superbuild CMake) are set. These will
-#     be called "kerneldb_INCLUDE_DIRS" and "kerneldb_LIBRARIES":
-#       - if yes, use them to link kernelDB
-#       - if no, use the default path
 target_include_directories (
     dh_comms 
   PRIVATE 
