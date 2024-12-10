@@ -14,6 +14,7 @@ public:
   virtual ~memory_heatmap_t() {};
   virtual bool handle(const message_t &message) override;
   virtual bool handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) override;
+  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) override;
   virtual void report() override;
   virtual void clear() override;
 

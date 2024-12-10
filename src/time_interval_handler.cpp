@@ -48,6 +48,16 @@ bool time_interval_handler_t::handle(const message_t &message) {
   return true;
 }
 
+void time_interval_handler_t::report(const std::string& kernel_name, kernelDB::kernelDB& kdb)
+{
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    report();
+}
+
 void time_interval_handler_t::report() {
   if (no_intervals_ != 0) {
     double average_time = (double)total_time_ / no_intervals_;

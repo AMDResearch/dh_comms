@@ -42,6 +42,16 @@ bool memory_heatmap_t::handle(const message_t &message) {
   return true;
 }
 
+void memory_heatmap_t::report(const std::string& kernel_name, kernelDB::kernelDB& kdb)
+{
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    report();
+}
+
 void memory_heatmap_t::report() {
   if (page_counts_.size() != 0) {
     printf("memory heatmap report:\n\tpage size = %lu\n", page_size_);

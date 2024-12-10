@@ -38,6 +38,18 @@ void message_handler_chain_t::report() {
   }
 }
 
+void message_handler_chain_t::report(const std::string& kernel_name, kernelDB::kernelDB& kdb)
+{
+    if (kernel_name.length() == 0)
+    {
+        std::vector<uint32_t> lines;
+        kdb.getKernelLines(kernel_name, lines);
+    }
+    for (auto &mh : message_handlers_) {
+        mh->report();
+    }
+}
+
 void message_handler_chain_t::clear_handler_states() {
   for (auto &mh : message_handlers_) {
     mh->clear();

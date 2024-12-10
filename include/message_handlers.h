@@ -32,6 +32,7 @@ public:
   //! on the fly as they are processed. These handlers do not need override this function, but just
   //! rely on the implementation of this function by the base class, which does nothing.
   virtual void report() {}
+  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) = 0;
   //! Stateful message handlers must implement the clear function by clearing their state,
   //! so that they can be reused for a new data processing run. Stateless message handlers
   //! don't need to override this function, but can inherit the base class implementation.
@@ -51,6 +52,7 @@ public:
   bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb);
   void add_handler(std::unique_ptr<message_handler_base> &&message_handler);
   void report();
+  void report(const std::string& kernel_name, kernelDB::kernelDB& kdb);
   void clear_handler_states(); //!< Keeps the handlers, but clears their states
   void clear();                //!< Removes all handlers from the chain
 
