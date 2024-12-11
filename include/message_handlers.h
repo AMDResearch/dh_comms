@@ -1,7 +1,7 @@
 #pragma once
 
 #include "message.h"
-#include "kerneldb/kernelDB.h"
+#include "kernelDB.h"
 
 #include <memory>
 #include <vector>

@@ -7,7 +7,7 @@
 #include <functional>
 #include <thread>
 #include <vector>
-#include "kerneldb/kernelDB.h"
+#include "kernelDB.h"
 
 namespace dh_comms {
 class dh_comms_mem_mgr {
