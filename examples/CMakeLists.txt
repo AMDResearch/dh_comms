@@ -8,7 +8,7 @@ target_include_directories(
     heatmap_example 
 PRIVATE 
     ${CMAKE_SOURCE_DIR}/include 
-    ${CMAKE_INSTALL_PREFIX}/include
+    ${CMAKE_INSTALL_PREFIX}/include/kerneldb
     ${ROCM_ROOT_DIR}/include
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
@@ -28,7 +28,7 @@ target_include_directories(
     bank_conflicts_example 
 PRIVATE 
     ${CMAKE_SOURCE_DIR}/include 
-    ${CMAKE_INSTALL_PREFIX}/include
+    ${CMAKE_INSTALL_PREFIX}/include/kerneldb
     ${ROCM_ROOT_DIR}/include
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
@@ -48,7 +48,7 @@ target_include_directories(
     memory_alignment_example 
 PRIVATE 
     ${CMAKE_SOURCE_DIR}/include 
-    ${CMAKE_INSTALL_PREFIX}/include
+    ${CMAKE_INSTALL_PREFIX}/include/kerneldb
     ${ROCM_ROOT_DIR}/include
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
