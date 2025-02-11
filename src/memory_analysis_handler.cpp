@@ -21,6 +21,18 @@ const uint8_t L2_cache_line_sizes[] = {
     128  // gfx942
 };
 
+const std::map<uint8_t, const char *> rw2str_map = {
+    {dh_comms::memory_access::undefined, "unspecified memory operation"},
+    {dh_comms::memory_access::read, "read"},
+    {dh_comms::memory_access::write, "write"},
+    {dh_comms::memory_access::read_write, "read/write"},
+};
+
+const std::map<std::string, uint16_t> instr_size_map = {
+    {"global_load_dword", 4},  {"global_load_dwordx2", 8},  {"global_load_dwordx3", 12},  {"global_load_dwordx4", 16},
+    {"global_store_dword", 4}, {"global_store_dwordx2", 8}, {"global_store_dwordx3", 12}, {"global_store_dwordx4", 16},
+};
+
 } // namespace
 
 namespace dh_comms {
@@ -94,11 +106,13 @@ memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
                             }});
 }
 
+memory_analysis_handler_t::~memory_analysis_handler_t() { std::cout << "~memory_analysis_handler()" << std::endl; }
+
 bool memory_analysis_handler_t::handle(const message_t &message) {
   assert(message.data_item_size() == sizeof(uint64_t));
   if (message.wave_header().user_type != message_type::address) {
     if (verbose_) {
-      printf("memory_heatmap: skipping message with user type 0x%x\n", message.wave_header().user_type);
+      printf("memory_analysis_handler: skipping message with user type 0x%x\n", message.wave_header().user_type);
     }
     return false;
   }
@@ -126,23 +140,17 @@ bool memory_analysis_handler_t::handle(const message_t &message) {
   return false;
 }
 
-bool memory_analysis_handler_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb)
-{
-    // This if block is just to get the compiler to quick throwing errors for unused parameters
-    if (kernel_name.length() == 0)
-    {
-        std::vector<uint32_t> lines;
-        kdb.getKernelLines(kernel_name, lines);
-    }
-    return handle(message);
-}
+bool memory_analysis_handler_t::handle(const message_t &message, const std::string &kernel_name,
+                                       kernelDB::kernelDB &kdb) {
+  kdb_p = &kdb;
+  this->kernel_name = kernel_name;
 
-const std::map<uint8_t, const char *> rw2str_map = {
-    {memory_access::undefined, "unspecified memory operation"},
-    {memory_access::read, "read"},
-    {memory_access::write, "write"},
-    {memory_access::read_write, "read/write"},
-};
+  auto result = handle(message);
+
+  this->kernel_name = "";
+  kdb_p = nullptr;
+  return result;
+}
 
 std::string rw2str(uint8_t rw_kind) {
   std::string rw_string;
@@ -153,6 +161,24 @@ std::string rw2str(uint8_t rw_kind) {
     rw_string = "[coding error: invalid encoding of memory operation type]";
   }
   return rw_string;
+}
+
+uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
+                                  kernelDB::kernelDB *kdb) {
+  printf("kdb = %p\n", kdb);
+  auto instructions = kdb->getInstructionsForLine(kernel_name, message.wave_header().src_loc_idx);
+  for (auto inst : instructions) {
+    printf("Checking %s...\n", inst.inst_.c_str());
+    const auto &s2u = instr_size_map.find(inst.inst_);
+    if (s2u != instr_size_map.end()) {
+      return s2u->second;
+    }
+  }
+  printf("Memory analysis handler: could not locate instruction in DWARF info\n");
+  for (const auto &item : instr_size_map) {
+    printf("   %s: %hu\n", item.first.c_str(), item.second);
+  }
+  return 0;
 }
 
 bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t &message) {
@@ -166,6 +192,11 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
 
   uint8_t rw_kind = message.wave_header().user_data & 0b11;
   uint16_t data_size = (message.wave_header().user_data >> 6) & 0xffff;
+  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p);
+  if (data_size_dwarf != 0 && data_size_dwarf != data_size) {
+    printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, data_size_dwarf);
+    data_size = data_size_dwarf;
+  }
   size_t min_cache_lines_needed = (message.no_data_items() * data_size + L2_cache_line_size - 1) / L2_cache_line_size;
   std::set<uint64_t> cache_lines;
   for (size_t i = 0; i != message.no_data_items(); ++i) {
@@ -315,14 +346,12 @@ void memory_analysis_handler_t::report_cache_line_use() {
   printf("=== End of L2 cache line use report ===============\n");
 }
 
-void memory_analysis_handler_t::report(const std::string& kernel_name, kernelDB::kernelDB& kdb)
-{
-    if (kernel_name.length() == 0)
-    {
-        std::vector<uint32_t> lines;
-        kdb.getKernelLines(kernel_name, lines);
-    }
-    report();
+void memory_analysis_handler_t::report(const std::string &kernel_name, kernelDB::kernelDB &kdb) {
+  if (kernel_name.length() == 0) {
+    std::vector<uint32_t> lines;
+    kdb.getKernelLines(kernel_name, lines);
+  }
+  report();
 }
 void memory_analysis_handler_t::report() {
   report_cache_line_use();

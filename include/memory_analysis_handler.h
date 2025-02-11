@@ -59,11 +59,11 @@ class memory_analysis_handler_t : public message_handler_base {
 public:
   memory_analysis_handler_t(bool verbose);
   memory_analysis_handler_t(const memory_analysis_handler_t &) = default;
-  virtual ~memory_analysis_handler_t() = default;
+  virtual ~memory_analysis_handler_t();
   virtual bool handle(const message_t &message) override;
-  virtual bool handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) override;
+  virtual bool handle(const message_t &message, const std::string &kernel_name, kernelDB::kernelDB &kdb) override;
   virtual void report() override;
-  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) override;
+  virtual void report(const std::string &kernel_name, kernelDB::kernelDB &kdb) override;
   virtual void clear() override;
 
 private:
@@ -101,6 +101,8 @@ private:
   //! needed was if the data accessed by the active lanes was consecutive and cache line aligned for each access,
   //! and how many cache lines were actually used
   l2rw2s2ac_t cache_line_use_counts;
+  kernelDB::kernelDB *kdb_p = nullptr;
+  std::string kernel_name = "";
   bool verbose_;
 };
 } // namespace dh_comms
