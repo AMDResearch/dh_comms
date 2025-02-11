@@ -7,13 +7,16 @@
 namespace dh_comms {
 __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message,
                                                bool has_lane_headers, uint64_t timestamp, uint32_t active_lane_count,
+                                               uint64_t dwarf_fname_hash, uint32_t dwarf_line, uint32_t dwarf_column,
                                                uint32_t src_loc_idx, uint32_t user_type, uint32_t user_data)
     : exec(exec),
       data_size(data_size),
       is_vector_message(is_vector_message),
       has_lane_headers(has_lane_headers),
       timestamp(timestamp),
-      active_lane_count(active_lane_count),
+      dwarf_fname_hash(dwarf_fname_hash),
+      dwarf_line(dwarf_line),
+      dwarf_column(dwarf_column),
       src_loc_idx(src_loc_idx),
       user_type(user_type),
       user_data(user_data),
@@ -21,6 +24,7 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
       block_idx_y(blockIdx.y),
       block_idx_z(blockIdx.z),
       wave_num(__wave_num()),
+      active_lane_count(active_lane_count),
       arch(gcnarch::unsupported) { // We'll check if the arch is supported in the constructor body.
   // for pre-MI300 hardware that isn't partitioned into XCCx, we set the xcc_id to zero. For
   // the MI300 variants (gfx94[012], we query the hardware registers to find out where on the

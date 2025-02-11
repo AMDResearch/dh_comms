@@ -17,8 +17,10 @@ struct wave_header_t {
   uint64_t has_lane_headers : 1;  //!< Indicates whether the message has lane headers (see lane_header_t) for the
                                   //!< active lanes.
   uint64_t timestamp;             //!< GPU timestamp of the moment the message was submitted.
-  uint32_t
-      active_lane_count : 7; //!< number of active lanes in the wavefront, i.e., number of 1-bits in the execution mask
+  uint64_t
+      dwarf_fname_hash;  //!< Hash of the source file containing the instruction that was instrumented with the message
+  uint32_t dwarf_line;   //!< Line number for the instrumented instruction
+  uint32_t dwarf_column; //!< Column for the instrumented instruction
   uint32_t src_loc_idx : 25; //!< Integer that can be used to uniquely identify the source code location from which
                              //!< the message was submitted.
   uint32_t user_type;        //!< \brief User-defined tag that indicates the content/interpretation of the data.
@@ -28,14 +30,14 @@ struct wave_header_t {
                              //!< struct containing several basic type), host code that processes the messages must
                              //!< be able to determine what kind of data is in the message, and how to process it.
                              //!< Note that the processing code on the host is to be provided by the user, although
-                             //!< some basic data processor classes are included with dh_comms. By using the user_type
-                             //!< tag, kernel code can indicate the type of data in the message, so that the host
-                             //!< processing code knows what to do with it.
-  uint32_t user_data;        //!< \brief user-defined field for additional data for the message.
-                             //!<
-                             //!< This field can for instance be used to distinguish between messages from different
-                             //!< kernels or kernel dispatches, if we are using a single dh_comms object to pass
-                             //!< messages from the device to the host, as opposed to having a separate dh_comms
+  //!< some basic data processor classes are included with dh_comms. By using the user_type
+  //!< tag, kernel code can indicate the type of data in the message, so that the host
+  //!< processing code knows what to do with it.
+  uint32_t user_data; //!< \brief user-defined field for additional data for the message.
+                      //!<
+                      //!< This field can for instance be used to distinguish between messages from different
+                      //!< kernels or kernel dispatches, if we are using a single dh_comms object to pass
+                      //!< messages from the device to the host, as opposed to having a separate dh_comms
   //!< object per kernel or kernel dispatch. Another use of the user_type tag is to distinguish
   //!< between memory reads vs writes, if our messages contain memory addresses (say, if
   //!< we are building a memory heatmap of the application).
@@ -56,15 +58,17 @@ struct wave_header_t {
   //!< there can be up to 16 per SE. If as SE has fewer than 16 CUs, they need not be numbered
   //!< consecutively, nor does the lowest CU number need to be 0. In fact, the CU numbers may
   //!< be different from one SE on the device to the next SE.
-  uint16_t se_id : 3;    //!< Number of the SE of the XCC on which the wavefront runs.
-  uint16_t cu_id : 4;    //!< Number of the CU of the SE on which the wavefront runs.
-  uint16_t unused16 : 1; //!< Padding; reserved for future use.
-  uint8_t arch;          // architecture of the device we're running on
+  uint16_t se_id : 3;        //!< Number of the SE of the XCC on which the wavefront runs.
+  uint16_t cu_id : 4;        //!< Number of the CU of the SE on which the wavefront runs.
+  uint16_t unused16 : 1;     //!< Padding; reserved for future use.
+  uint8_t active_lane_count; //!< number of active lanes in the wavefront, i.e., number of 1-bits in the execution mask
+  uint8_t arch;              // architecture of the device we're running on
 
   //! Wave header constructor; wave header members for which there is no corresponding
   //! constructor argument are detected and assigned by the constructor.
   __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
-                           uint64_t timestamp, uint32_t active_lane_count, uint32_t src_loc_idx, uint32_t user_type,
+                           uint64_t timestamp, uint32_t active_lane_count, uint64_t dwarf_fname_hash,
+                           uint32_t dwarf_line, uint32_t dwarf_column, uint32_t src_loc_idx, uint32_t user_type,
                            uint32_t user_data);
 
   //! Wave header constructor; creates a wave header from raw bytes

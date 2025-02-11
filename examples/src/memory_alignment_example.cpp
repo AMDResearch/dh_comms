@@ -10,13 +10,13 @@
 
 __global__ void test_uint64_t(int *indices, uint64_t *memory, dh_comms::dh_comms_descriptor *rsrc) {
   int idx = indices[threadIdx.x];
-  dh_comms::v_submit_address(rsrc, indices + threadIdx.x, __LINE__, dh_comms::memory_access::read,
+  dh_comms::v_submit_address(rsrc, indices + threadIdx.x, 0, __LINE__, 0, __LINE__, dh_comms::memory_access::read,
                              dh_comms::address_space::global, sizeof(int));
   if (idx == -1) {
     return;
   }
   memory[idx] = 0;
-  dh_comms::v_submit_address(rsrc, memory + idx, __LINE__, dh_comms::memory_access::write,
+  dh_comms::v_submit_address(rsrc, memory + idx, 0, __LINE__, 0, __LINE__, dh_comms::memory_access::write,
                              dh_comms::address_space::global, sizeof(uint64_t));
 }
 
