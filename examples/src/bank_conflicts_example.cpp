@@ -11,7 +11,7 @@
 __global__ void test_uint32_t(int *indices, uint32_t *sink, dh_comms::dh_comms_descriptor *rsrc) {
   __shared__ uint32_t lds[64 * 1024 / sizeof(uint32_t)];
   lds[threadIdx.x] = threadIdx.x;
-  dh_comms::v_submit_address(rsrc, lds + threadIdx.x, 0, __LINE__, 0, __LINE__, dh_comms::memory_access::write,
+  dh_comms::v_submit_address(rsrc, lds + threadIdx.x, 0, __LINE__, 0, dh_comms::memory_access::write,
                              dh_comms::address_space::shared, sizeof(uint32_t));
 
   int idx = indices[threadIdx.x];
@@ -19,10 +19,10 @@ __global__ void test_uint32_t(int *indices, uint32_t *sink, dh_comms::dh_comms_d
     return;
   }
   uint32_t garbage = lds[idx];
-  dh_comms::v_submit_address(rsrc, lds + idx, 0, __LINE__, 0, __LINE__, dh_comms::memory_access::read,
+  dh_comms::v_submit_address(rsrc, lds + idx, 0, __LINE__, 0, dh_comms::memory_access::read,
                              dh_comms::address_space::shared, sizeof(uint32_t));
   garbage += lds[idx + 64];
-  dh_comms::v_submit_address(rsrc, lds + idx + 64, 0, __LINE__, 0, __LINE__, dh_comms::memory_access::read,
+  dh_comms::v_submit_address(rsrc, lds + idx + 64, 0, __LINE__, 0, dh_comms::memory_access::read,
                              dh_comms::address_space::shared, sizeof(uint32_t));
   *sink = garbage;
 }

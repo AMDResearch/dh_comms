@@ -165,8 +165,10 @@ std::string rw2str(uint8_t rw_kind) {
 
 uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
                                   kernelDB::kernelDB *kdb) {
-  printf("kdb = %p\n", kdb);
-  auto instructions = kdb->getInstructionsForLine(kernel_name, message.wave_header().src_loc_idx);
+  if (kdb == nullptr) {
+    return 0;
+  }
+  auto instructions = kdb->getInstructionsForLine(kernel_name, message.wave_header().dwarf_line);
   for (auto inst : instructions) {
     printf("Checking %s...\n", inst.inst_.c_str());
     const auto &s2u = instr_size_map.find(inst.inst_);
@@ -213,10 +215,10 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
 
   if (verbose_ and (cache_lines_used != min_cache_lines_needed)) {
     std::string rw_string = rw2str(rw_kind);
-    printf("location %u: global memory access by %zu lanes:\n"
+    printf("line %u: global memory access by %zu lanes:\n"
            "\t%s of %u bytes/lane, minimum L2 cache lines required %zu, cache lines used %zu\n"
            "\texecution mask = %s\n",
-           message.wave_header().src_loc_idx, message.no_data_items(), rw_string.c_str(), data_size,
+           message.wave_header().dwarf_line, message.no_data_items(), rw_string.c_str(), data_size,
            min_cache_lines_needed, cache_lines_used, exec2binstr(message.wave_header().exec).c_str());
     auto lane_ids_of_active_lanes = get_lane_ids_of_active_lanes(message.wave_header());
     printf("\n\tAddresses accessed (lane: address)");
@@ -243,7 +245,7 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
     printf("\n");
   }
 
-  access_counts_t &counts = cache_line_use_counts[message.wave_header().src_loc_idx][rw_kind][data_size];
+  access_counts_t &counts = cache_line_use_counts[message.wave_header().dwarf_line][rw_kind][data_size];
   ++counts.no_accesses;
   counts.min_cache_lines_needed += min_cache_lines_needed;
   counts.cache_lines_used += cache_lines_used;
@@ -280,14 +282,14 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
 
   if (verbose_) {
     std::string rw_string = rw2str(rw_kind);
-    printf("location %u: LDS access\n"
+    printf("line %u: LDS access\n"
            "\t%s of %u bytes/lane, %zu bank conflicts\n"
            "\texecution mask = %s\n",
-           message.wave_header().src_loc_idx, rw_string.c_str(), data_size, bank_conflict_count,
+           message.wave_header().dwarf_line, rw_string.c_str(), data_size, bank_conflict_count,
            exec2binstr(message.wave_header().exec).c_str());
   }
 
-  counts_t &counts = bank_conflict_counts[message.wave_header().src_loc_idx][rw_kind][data_size];
+  counts_t &counts = bank_conflict_counts[message.wave_header().dwarf_line][rw_kind][data_size];
   ++counts.no_accesses;
   counts.no_conflicts += bank_conflict_count;
 

@@ -99,7 +99,6 @@ __device__ inline void generic_submit_message(
     uint64_t dwarf_fname_hash, // Hash for the source file name from which v_submit_message() is called
     uint32_t dwarf_line,       // Line number for which v_submit_message() is called
     uint32_t dwarf_column,     // Column for which v_submit_message() is called
-    uint32_t src_loc_idx,      // Integer to identify the source code location from which v_submit_message() is called.
     uint32_t user_type,        // Tag to distinguish between different kinds of messages, used by host
                                // code that processes the messages.
     uint32_t user_data,        // Auxiliary data field; it's use depends on the message type.
@@ -156,7 +155,7 @@ __device__ inline void generic_submit_message(
   // First write the wave header; only one wave takes care of that
   if (active_lane_id == 0) {
     wave_header_t wave_header(exec, data_size, is_vector_message, submit_lane_headers, timestamp, active_lane_count,
-                              dwarf_fname_hash, dwarf_line, dwarf_column, src_loc_idx, user_type, user_data);
+                              dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
     size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size;
     wave_header_t *wave_header_p = (wave_header_t *)(&buffer[byte_offset]);
     *wave_header_p = wave_header;
@@ -241,17 +240,15 @@ __attribute__((used)) extern "C" __device__ inline void v_submit_message(
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column =
-        0xffffffff, //!< Column of the instrumented instruction for which v_submit_message() is called.
-    uint32_t src_loc_idx =
-        0xffffffff, //!< Integer to identify the source code location from which v_submit_message() is called.
+        0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
                                      //!< code that processes the messages.
     uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
 {
   bool is_vector_message = true;
   bool submit_lane_headers = true;
-  generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, src_loc_idx,
-                         user_type, user_data, is_vector_message, submit_lane_headers);
+  generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
+                         is_vector_message, submit_lane_headers);
 }
 
 //! \brief Submit a scalar message of any type that is valid in device code from the device to the host.
@@ -269,16 +266,14 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_message(
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column =
-        0xffffffff, //!< Column of the instrumented instruction for which v_submit_message() is called.
-    uint32_t src_loc_idx =
-        0xffffffff, //!< Integer to identify the source code location from which v_submit_message() is called.
+        0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
                                      //!< code that processes the messages.
     uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
 {
   bool is_vector_message = false;
-  generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, src_loc_idx,
-                         user_type, user_data, is_vector_message, submit_lane_headers);
+  generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
+                         is_vector_message, submit_lane_headers);
 }
 
 //! \brief Submit a a single wave header; no lane headers, no message data.
@@ -295,7 +290,6 @@ __attribute__((used)) extern "C" __device__ inline void v_submit_address(
     uint64_t dwarf_fname_hash, //!< Hash of the source file from which v_submit_message() is called.
     uint32_t dwarf_line,       //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column,     //!< Column of the instrumented instruction for which v_submit_message() is called.
-    uint32_t src_loc_idx,
     uint8_t rw_kind,           // use 2 bits: 0b01 = read, 0b10 = write, 0b11 = modify (e.g., atomic add)
     uint8_t memory_space,      // use 4 bits (don't need that many on current hardware)
     uint16_t sizeof_pointee) { // use 26 bits (unlikely large for GPU code)
@@ -303,8 +297,7 @@ __attribute__((used)) extern "C" __device__ inline void v_submit_address(
   uint32_t user_data = rw_kind & 0b11;
   user_data |= ((memory_space & 0xf) << 2);
   user_data |= (sizeof_pointee << 6);
-  v_submit_message(rsrc, &address, sizeof(void *), dwarf_fname_hash, dwarf_line, dwarf_column, src_loc_idx, user_type,
-                   user_data);
+  v_submit_message(rsrc, &address, sizeof(void *), dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
 }
 
 __attribute__((used)) extern "C" __device__ inline void s_submit_time_interval(
@@ -312,10 +305,7 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_time_interval(
     uint64_t dwarf_fname_hash = 0, //!< Hash of the source file from which v_submit_message() is called.
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
-    uint32_t dwarf_column =
-        0xffffffff, //!< Column of the instrumented instruction for which v_submit_message() is called.
-    uint32_t src_loc_idx = 0xffffffff) {
-  s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), false, dwarf_fname_hash, dwarf_line, dwarf_column,
-                   src_loc_idx, 1);
+    uint32_t dwarf_column = 0xffffffff) {
+  s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), false, dwarf_fname_hash, dwarf_line, dwarf_column, 1);
 }
 } // namespace dh_comms

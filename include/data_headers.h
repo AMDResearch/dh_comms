@@ -21,15 +21,13 @@ struct wave_header_t {
       dwarf_fname_hash;  //!< Hash of the source file containing the instruction that was instrumented with the message
   uint32_t dwarf_line;   //!< Line number for the instrumented instruction
   uint32_t dwarf_column; //!< Column for the instrumented instruction
-  uint32_t src_loc_idx : 25; //!< Integer that can be used to uniquely identify the source code location from which
-                             //!< the message was submitted.
-  uint32_t user_type;        //!< \brief User-defined tag that indicates the content/interpretation of the data.
-                             //!<
-                             //!< Since kernels can submit any type of data that is valid on the device, such as
-                             //!< an uint64_t (which could represent a memory address or a loop counter) or a
-                             //!< struct containing several basic type), host code that processes the messages must
-                             //!< be able to determine what kind of data is in the message, and how to process it.
-                             //!< Note that the processing code on the host is to be provided by the user, although
+  uint32_t user_type;    //!< \brief User-defined tag that indicates the content/interpretation of the data.
+                         //!<
+                         //!< Since kernels can submit any type of data that is valid on the device, such as
+                         //!< an uint64_t (which could represent a memory address or a loop counter) or a
+                         //!< struct containing several basic type), host code that processes the messages must
+                         //!< be able to determine what kind of data is in the message, and how to process it.
+                         //!< Note that the processing code on the host is to be provided by the user, although
   //!< some basic data processor classes are included with dh_comms. By using the user_type
   //!< tag, kernel code can indicate the type of data in the message, so that the host
   //!< processing code knows what to do with it.
@@ -68,8 +66,7 @@ struct wave_header_t {
   //! constructor argument are detected and assigned by the constructor.
   __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
                            uint64_t timestamp, uint32_t active_lane_count, uint64_t dwarf_fname_hash,
-                           uint32_t dwarf_line, uint32_t dwarf_column, uint32_t src_loc_idx, uint32_t user_type,
-                           uint32_t user_data);
+                           uint32_t dwarf_line, uint32_t dwarf_column, uint32_t user_type, uint32_t user_data);
 
   //! Wave header constructor; creates a wave header from raw bytes
   wave_header_t(const char *wave_header_p);
