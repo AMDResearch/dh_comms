@@ -163,22 +163,63 @@ std::string rw2str(uint8_t rw_kind) {
   return rw_string;
 }
 
+// Returns the size of the load/store for the ISA instruction associated with a source location.
+// The source location comes from IR instrumentation, and may be e.g. for a load of an int (dword),
+// so based on IR info, we would assume a size of 4 bytes for the load. However, the optimizer may
+// have combined four adjacent dword loads into a single dwordx4 load (so 16 bytes). This function uses
+// kernelDB to find the load/store size for the actual ISA instruction associated with the source
+// location.
+// If the pointer to kernelDB is zero, or if kernelDB finds an ISA instruction for the source location
+// and we don't know the load/store size for that instruction (because it isn't in our table of known
+// instructions), this function returns zero, signalling to the caller not to change the size of the
+// load/store.
+// If kernelDB doesn't find any instruction for the given source location, it will throw an exception.
+// This function catches the exception and returns 0xffffff, signalling to the caller that no ISA instruction
+// is associated with the source location; the caller will then drop the message.
 uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
                                   kernelDB::kernelDB *kdb) {
+  // return 0;
   if (kdb == nullptr) {
     return 0;
   }
-  auto instructions = kdb->getInstructionsForLine(kernel_name, message.wave_header().dwarf_line);
-  for (auto inst : instructions) {
-    printf("Checking %s...\n", inst.inst_.c_str());
-    const auto &s2u = instr_size_map.find(inst.inst_);
-    if (s2u != instr_size_map.end()) {
-      return s2u->second;
+  auto hdr = message.wave_header();
+  printf("---\nFrom IR instrumentation: dwarf_fname_hash = 0x%lx, line = %u, column = %u\n", hdr.dwarf_fname_hash,
+         hdr.dwarf_line, hdr.dwarf_column);
+  std::string isa_instruction = "";
+  try {
+    auto instructions = kdb->getInstructionsForLine(kernel_name, hdr.dwarf_line);
+    for (auto inst : instructions) {
+      isa_instruction = inst.inst_;
+      printf("Checking %s...\n", isa_instruction.c_str());
+      auto kdb_dwarf_fname = kdb->getFileName(kernel_name, inst.path_id_);
+      size_t kdb_dwarf_fname_hash = std::hash<std::string>{}(kdb_dwarf_fname);
+      if (kdb_dwarf_fname_hash == hdr.dwarf_fname_hash and inst.line_ == hdr.dwarf_line and
+          inst.column_ == hdr.dwarf_column) {
+        printf("\tsource location: %s:%u:%u\n", kdb_dwarf_fname.c_str(), inst.line_, inst.column_);
+        printf("\tdwarf_fname_hash = 0x%lx\n", kdb_dwarf_fname_hash);
+
+        // we have a match between the instruction instrumented at the IR level and
+        // an ISA instruction for the same file, line and column. Now lookup the
+        // data access size for the ISA instruction
+        const auto s2u = instr_size_map.find(isa_instruction);
+        if (s2u != instr_size_map.end()) {
+          return s2u->second;
+        }
+      }
     }
+  } catch (const std::exception &e) {
+    // kernelDB didn't find any instructions for the source line number is the IR.
+    // This can happen if e.g. 4 consecutive lines with an int (dword) load or store
+    // are combined into a dwordx4 load or store. The line number in the dwarf will point
+    // to the last line of the four with the individual instructions.
+    // If we catch an exception, we'll assume that precisely this happened, and return all
+    // ones. The caller than gets to decide what to do (e.g. just drop the message).
+    return 0xffff;
   }
-  printf("Memory analysis handler: could not locate instruction in DWARF info\n");
-  for (const auto &item : instr_size_map) {
-    printf("   %s: %hu\n", item.first.c_str(), item.second);
+
+  printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
+  for (auto entry : instr_size_map) {
+    printf("%s: %u\n", entry.first.c_str(), entry.second);
   }
   return 0;
 }
@@ -195,9 +236,15 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   uint8_t rw_kind = message.wave_header().user_data & 0b11;
   uint16_t data_size = (message.wave_header().user_data >> 6) & 0xffff;
   uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p);
+  if (data_size_dwarf ==
+      0xffff) { // no instruction found in ISA for source line in IR, may have been combined with other instructions.
+    return true;
+  }
+  bool data_size_corrected = false;
   if (data_size_dwarf != 0 && data_size_dwarf != data_size) {
     printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, data_size_dwarf);
     data_size = data_size_dwarf;
+    data_size_corrected = true;
   }
   size_t min_cache_lines_needed = (message.no_data_items() * data_size + L2_cache_line_size - 1) / L2_cache_line_size;
   std::set<uint64_t> cache_lines;
@@ -212,6 +259,15 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
     }
   }
   uint64_t cache_lines_used = cache_lines.size();
+
+  // heuristic: if the data size changed from IR to ISA, we may get accesses that seem to
+  // need one more cache line than needed. This happens for address messages emitted at the
+  // instrumentation level that are combined into larger units at the ISA level. If we encounter
+  // this, we drop the message. There may be pathetic memory access cases that are missed
+  // by this heuristic.
+  if (data_size_corrected and cache_lines_used <= min_cache_lines_needed + 1) {
+    return true;
+  }
 
   if (verbose_ and (cache_lines_used != min_cache_lines_needed)) {
     std::string rw_string = rw2str(rw_kind);
