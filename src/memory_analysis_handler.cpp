@@ -174,26 +174,33 @@ std::string rw2str(uint8_t rw_kind, const std::map<uint8_t, const char *> &rw2st
 // This function catches the exception and returns 0xffffff, signalling to the caller that no ISA instruction
 // is associated with the source location; the caller will then drop the message.
 uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
-                                  kernelDB::kernelDB *kdb, const std::map<std::string, uint16_t> &instr_size_map) {
+                                  kernelDB::kernelDB *kdb, const std::map<std::string, uint16_t> &instr_size_map,
+                                  bool verbose) {
   // return 0;
   if (kdb == nullptr) {
     return 0;
   }
   auto hdr = message.wave_header();
-  printf("---\nFrom IR instrumentation: dwarf_fname_hash = 0x%lx, line = %u, column = %u\n", hdr.dwarf_fname_hash,
-         hdr.dwarf_line, hdr.dwarf_column);
+  if (verbose) {
+    printf("---\nFrom IR instrumentation: dwarf_fname_hash = 0x%lx, line = %u, column = %u\n", hdr.dwarf_fname_hash,
+           hdr.dwarf_line, hdr.dwarf_column);
+  }
   std::string isa_instruction = "";
   try {
     auto instructions = kdb->getInstructionsForLine(kernel_name, hdr.dwarf_line);
     for (auto inst : instructions) {
       isa_instruction = inst.inst_;
-      printf("Checking %s...\n", isa_instruction.c_str());
+      if (verbose) {
+        printf("Checking %s...\n", isa_instruction.c_str());
+      }
       auto kdb_dwarf_fname = kdb->getFileName(kernel_name, inst.path_id_);
       size_t kdb_dwarf_fname_hash = std::hash<std::string>{}(kdb_dwarf_fname);
       if (kdb_dwarf_fname_hash == hdr.dwarf_fname_hash and inst.line_ == hdr.dwarf_line and
           inst.column_ == hdr.dwarf_column) {
-        printf("\tsource location: %s:%u:%u\n", kdb_dwarf_fname.c_str(), inst.line_, inst.column_);
-        printf("\tdwarf_fname_hash = 0x%lx\n", kdb_dwarf_fname_hash);
+        if (verbose) {
+          printf("\tsource location: %s:%u:%u\n", kdb_dwarf_fname.c_str(), inst.line_, inst.column_);
+          printf("\tdwarf_fname_hash = 0x%lx\n", kdb_dwarf_fname_hash);
+        }
 
         // we have a match between the instruction instrumented at the IR level and
         // an ISA instruction for the same file, line and column. Now lookup the
@@ -214,7 +221,9 @@ uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std:
     return 0xffff;
   }
 
-  printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
+  if (verbose) {
+    printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
+  }
   for (auto entry : instr_size_map) {
     printf("%s: %u\n", entry.first.c_str(), entry.second);
   }
@@ -232,14 +241,16 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
 
   uint8_t rw_kind = message.wave_header().user_data & 0b11;
   uint16_t data_size = (message.wave_header().user_data >> 6) & 0xffff;
-  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p, instr_size_map);
+  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p, instr_size_map, verbose_);
   if (data_size_dwarf ==
       0xffff) { // no instruction found in ISA for source line in IR, may have been combined with other instructions.
     return true;
   }
   bool data_size_corrected = false;
   if (data_size_dwarf != 0 && data_size_dwarf != data_size) {
-    printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, data_size_dwarf);
+    if (verbose_) {
+      printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, data_size_dwarf);
+    }
     data_size = data_size_dwarf;
     data_size_corrected = true;
   }
