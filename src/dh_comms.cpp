@@ -92,10 +92,9 @@ dh_comms_resources::~dh_comms_resources() {
 }
 
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, kernelDB::kernelDB *kdb, bool verbose,
-                   bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through) :
-                   dh_comms(no_sub_buffers, sub_buffer_capacity, verbose, install_default_handlers, mgr, handlers_pass_through)
-{
-    kdb_ = kdb;
+                   bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through)
+    : dh_comms(no_sub_buffers, sub_buffer_capacity, verbose, install_default_handlers, mgr, handlers_pass_through) {
+  kdb_ = kdb;
 }
 
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, bool verbose,
@@ -108,8 +107,7 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       message_handler_chain_(handlers_pass_through),
       sub_buffer_processor_(),
       start_time_(),
-      stop_time_()
-{
+      stop_time_() {
   kdb_ = nullptr;
   if (install_default_handlers) {
     install_default_message_handlers();
@@ -147,10 +145,9 @@ void dh_comms::start() {
   sub_buffer_processor_ = std::thread(&dh_comms::process_sub_buffers, this);
 }
 
-void dh_comms::start(const std::string& kernel_name)
-{
-    kernel_name_ = kernel_name;
-    start();
+void dh_comms::start(const std::string &kernel_name) {
+  kernel_name_ = kernel_name;
+  start();
 }
 
 void dh_comms::stop() {
@@ -185,6 +182,7 @@ void dh_comms::report(bool auto_clear_states) {
 
 void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_handler) {
   assert(not running_);
+  assert(message_handler);
   message_handler_chain_.add_handler(std::move(message_handler));
 }
 
@@ -217,9 +215,9 @@ void dh_comms::processing_loop(bool is_final_loop) {
       while (size != 0 and message_handler_chain_.size() != 0) {
         message_t message(message_p);
         if (kdb_)
-            message_handler_chain_.handle(message, kernel_name_, *kdb_);
+          message_handler_chain_.handle(message, kernel_name_, *kdb_);
         else
-            message_handler_chain_.handle(message);
+          message_handler_chain_.handle(message);
         assert(message.size() <= size);
         size -= message.size();
         message_p += message.size();

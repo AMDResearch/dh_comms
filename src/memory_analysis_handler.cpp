@@ -11,7 +11,7 @@
 namespace {
 constexpr size_t no_banks = 32;
 
-const uint8_t L2_cache_line_sizes[] = {
+constexpr uint8_t L2_cache_line_sizes[] = {
     0,   // unsupported archs
     64,  // gfx906
     64,  // gfx908
@@ -19,18 +19,6 @@ const uint8_t L2_cache_line_sizes[] = {
     128, // gfx940
     128, // gfx941
     128  // gfx942
-};
-
-const std::map<uint8_t, const char *> rw2str_map = {
-    {dh_comms::memory_access::undefined, "unspecified memory operation"},
-    {dh_comms::memory_access::read, "read"},
-    {dh_comms::memory_access::write, "write"},
-    {dh_comms::memory_access::read_write, "read/write"},
-};
-
-const std::map<std::string, uint16_t> instr_size_map = {
-    {"global_load_dword", 4},  {"global_load_dwordx2", 8},  {"global_load_dwordx3", 12},  {"global_load_dwordx4", 16},
-    {"global_store_dword", 4}, {"global_store_dwordx2", 8}, {"global_store_dwordx3", 12}, {"global_store_dwordx4", 16},
 };
 
 } // namespace
@@ -75,7 +63,18 @@ void conflict_set::clear() {
 memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
     : bank_conflict_counts(),
       conflict_sets(),
-      verbose_(verbose) {
+      verbose_(verbose),
+      rw2str_map{
+          {dh_comms::memory_access::undefined, "unspecified memory operation"},
+          {dh_comms::memory_access::read, "read"},
+          {dh_comms::memory_access::write, "write"},
+          {dh_comms::memory_access::read_write, "read/write"},
+      },
+      instr_size_map{
+          {"global_load_dword", 4},     {"global_load_dwordx2", 8},   {"global_load_dwordx3", 12},
+          {"global_load_dwordx4", 16},  {"global_store_dword", 4},    {"global_store_dwordx2", 8},
+          {"global_store_dwordx3", 12}, {"global_store_dwordx4", 16},
+      } {
   conflict_sets.insert({1, std::vector<conflict_set>{
                                conflict_set{std::vector<std::pair<size_t, size_t>>{{0, 32}}},
                                conflict_set{std::vector<std::pair<size_t, size_t>>{{32, 64}}},
@@ -105,8 +104,6 @@ memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
                                 conflict_set{std::vector<std::pair<size_t, size_t>>{{44, 48}, {56, 60}}},
                             }});
 }
-
-memory_analysis_handler_t::~memory_analysis_handler_t() { std::cout << "~memory_analysis_handler()" << std::endl; }
 
 bool memory_analysis_handler_t::handle(const message_t &message) {
   assert(message.data_item_size() == sizeof(uint64_t));
@@ -152,7 +149,7 @@ bool memory_analysis_handler_t::handle(const message_t &message, const std::stri
   return result;
 }
 
-std::string rw2str(uint8_t rw_kind) {
+std::string rw2str(uint8_t rw_kind, const std::map<uint8_t, const char *> &rw2str_map) {
   std::string rw_string;
   const auto &rw_s = rw2str_map.find(rw_kind);
   if (rw_s != rw2str_map.end()) {
@@ -177,7 +174,7 @@ std::string rw2str(uint8_t rw_kind) {
 // This function catches the exception and returns 0xffffff, signalling to the caller that no ISA instruction
 // is associated with the source location; the caller will then drop the message.
 uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
-                                  kernelDB::kernelDB *kdb) {
+                                  kernelDB::kernelDB *kdb, const std::map<std::string, uint16_t> &instr_size_map) {
   // return 0;
   if (kdb == nullptr) {
     return 0;
@@ -235,7 +232,7 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
 
   uint8_t rw_kind = message.wave_header().user_data & 0b11;
   uint16_t data_size = (message.wave_header().user_data >> 6) & 0xffff;
-  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p);
+  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p, instr_size_map);
   if (data_size_dwarf ==
       0xffff) { // no instruction found in ISA for source line in IR, may have been combined with other instructions.
     return true;
@@ -270,7 +267,7 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   }
 
   if (verbose_ and (cache_lines_used != min_cache_lines_needed)) {
-    std::string rw_string = rw2str(rw_kind);
+    std::string rw_string = rw2str(rw_kind, rw2str_map);
     printf("line %u: global memory access by %zu lanes:\n"
            "\t%s of %u bytes/lane, minimum L2 cache lines required %zu, cache lines used %zu\n"
            "\texecution mask = %s\n",
@@ -337,7 +334,7 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
   }
 
   if (verbose_) {
-    std::string rw_string = rw2str(rw_kind);
+    std::string rw_string = rw2str(rw_kind, rw2str_map);
     printf("line %u: LDS access\n"
            "\t%s of %u bytes/lane, %zu bank conflicts\n"
            "\texecution mask = %s\n",
@@ -365,7 +362,7 @@ void memory_analysis_handler_t::report_bank_conflicts() {
             found_conflicts_for_location = true;
           }
           found_conflicts = true;
-          std::string rw_string = rw2str(rw_kind);
+          std::string rw_string = rw2str(rw_kind, rw2str_map);
           printf("\t%s of %u bytes/lane: executed %zu times, %zu total bank conflict(s)\n", rw_string.c_str(), size,
                  counts.no_accesses, counts.no_conflicts);
         }
@@ -391,7 +388,7 @@ void memory_analysis_handler_t::report_cache_line_use() {
             found_excess_for_location = true;
           }
           found_excess = true;
-          std::string rw_string = rw2str(rw_kind);
+          std::string rw_string = rw2str(rw_kind, rw2str_map);
           printf("\t%s of %u bytes/lane: executed %zu times, %zu cache lines needed, %zu cache lines used\n",
                  rw_string.c_str(), size, counts.no_accesses, counts.min_cache_lines_needed, counts.cache_lines_used);
         }

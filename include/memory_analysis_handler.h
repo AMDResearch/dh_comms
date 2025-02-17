@@ -59,7 +59,7 @@ class memory_analysis_handler_t : public message_handler_base {
 public:
   memory_analysis_handler_t(bool verbose);
   memory_analysis_handler_t(const memory_analysis_handler_t &) = default;
-  virtual ~memory_analysis_handler_t();
+  virtual ~memory_analysis_handler_t() = default;
   virtual bool handle(const message_t &message) override;
   virtual bool handle(const message_t &message, const std::string &kernel_name, kernelDB::kernelDB &kdb) override;
   virtual void report() override;
@@ -104,5 +104,7 @@ private:
   kernelDB::kernelDB *kdb_p = nullptr;
   std::string kernel_name = "";
   bool verbose_;
+  const std::map<uint8_t, const char *> rw2str_map;
+  const std::map<std::string, uint16_t> instr_size_map;
 };
 } // namespace dh_comms
