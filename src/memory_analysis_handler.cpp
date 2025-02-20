@@ -126,6 +126,8 @@ bool memory_analysis_handler_t::handle(const message_t &message) {
   case address_space::shared:
     return handle_bank_conflict_analysis(message);
     break;
+  case address_space::constant:
+    break;
   case address_space::scratch:
     break;
   case address_space::undefined:
