@@ -71,9 +71,10 @@ memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
           {dh_comms::memory_access::read_write, "read/write"},
       },
       instr_size_map{
-          {"global_load_dword", 4},     {"global_load_dwordx2", 8},   {"global_load_dwordx3", 12},
-          {"global_load_dwordx4", 16},  {"global_store_dword", 4},    {"global_store_dwordx2", 8},
-          {"global_store_dwordx3", 12}, {"global_store_dwordx4", 16},
+          {"global_load_dword", {4, memory_access::read}},      {"global_load_dwordx2", {8, memory_access::read}},
+          {"global_load_dwordx3", {12, memory_access::read}},   {"global_load_dwordx4", {16, memory_access::read}},
+          {"global_store_dword", {4, memory_access::write}},    {"global_store_dwordx2", {8, memory_access::write}},
+          {"global_store_dwordx3", {12, memory_access::write}}, {"global_store_dwordx4", {16, memory_access::write}},
       } {
   conflict_sets.insert({1, std::vector<conflict_set>{
                                conflict_set{std::vector<std::pair<size_t, size_t>>{{0, 32}}},
@@ -175,18 +176,27 @@ std::string rw2str(uint8_t rw_kind, const std::map<uint8_t, const char *> &rw2st
 // If kernelDB doesn't find any instruction for the given source location, it will throw an exception.
 // This function catches the exception and returns 0xffffff, signalling to the caller that no ISA instruction
 // is associated with the source location; the caller will then drop the message.
-uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std::string &kernel_name,
-                                  kernelDB::kernelDB *kdb, const std::map<std::string, uint16_t> &instr_size_map,
-                                  bool verbose) {
-  // return 0;
+
+struct dwarf_info_t {
+  std::string fname;
+  std::string isa_instruction;
+  uint16_t access_size = 0;
+};
+
+dwarf_info_t
+get_dwarf_info(const dh_comms::message_t &message, const std::string &kernel_name, kernelDB::kernelDB *kdb,
+               const std::map<std::string, dh_comms::memory_analysis_handler_t::access_size_and_type> &instr_size_map,
+               bool verbose) {
+  dwarf_info_t dwarf_info;
   if (kdb == nullptr) {
-    return 0;
+    return dwarf_info;
   }
   auto hdr = message.wave_header();
   if (verbose) {
     printf("---\nFrom IR instrumentation: dwarf_fname_hash = 0x%lx, line = %u, column = %u\n", hdr.dwarf_fname_hash,
            hdr.dwarf_line, hdr.dwarf_column);
   }
+  uint8_t rw_kind = message.wave_header().user_data & 0b11;
   std::string isa_instruction = "";
   try {
     auto instructions = kdb->getInstructionsForLine(kernel_name, hdr.dwarf_line);
@@ -208,8 +218,11 @@ uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std:
         // an ISA instruction for the same file, line and column. Now lookup the
         // data access size for the ISA instruction
         const auto s2u = instr_size_map.find(isa_instruction);
-        if (s2u != instr_size_map.end()) {
-          return s2u->second;
+        if (s2u != instr_size_map.end() and s2u->second.access_type == rw_kind) {
+          dwarf_info.fname = kdb_dwarf_fname;
+          dwarf_info.isa_instruction = isa_instruction;
+          dwarf_info.access_size = s2u->second.size;
+          return dwarf_info;
         }
       }
     }
@@ -220,16 +233,12 @@ uint16_t get_data_size_from_dwarf(const dh_comms::message_t &message, const std:
     // to the last line of the four with the individual instructions.
     // If we catch an exception, we'll assume that precisely this happened, and return all
     // ones. The caller than gets to decide what to do (e.g. just drop the message).
-    return 0xffff;
+    dwarf_info.access_size = 0xffff;
+    return dwarf_info;
   }
 
-  if (verbose) {
-    printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
-  }
-  for (auto entry : instr_size_map) {
-    printf("%s: %u\n", entry.first.c_str(), entry.second);
-  }
-  return 0;
+  printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
+  return dwarf_info;
 }
 
 bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t &message) {
@@ -242,18 +251,19 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   }
 
   uint8_t rw_kind = message.wave_header().user_data & 0b11;
-  uint16_t data_size = (message.wave_header().user_data >> 6) & 0xffff;
-  uint16_t data_size_dwarf = get_data_size_from_dwarf(message, kernel_name, kdb_p, instr_size_map, verbose_);
-  if (data_size_dwarf ==
+  uint16_t ir_data_size = (message.wave_header().user_data >> 6) & 0xffff;
+  uint16_t data_size = ir_data_size;
+  dwarf_info_t dwarf_info = get_dwarf_info(message, kernel_name, kdb_p, instr_size_map, verbose_);
+  if (dwarf_info.access_size ==
       0xffff) { // no instruction found in ISA for source line in IR, may have been combined with other instructions.
     return true;
   }
   bool data_size_corrected = false;
-  if (data_size_dwarf != 0 && data_size_dwarf != data_size) {
+  if (dwarf_info.access_size != 0 && dwarf_info.access_size != data_size) {
     if (verbose_) {
-      printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, data_size_dwarf);
+      printf("Corrected data size from %hu to %hu using DWARF information\n", data_size, dwarf_info.access_size);
     }
-    data_size = data_size_dwarf;
+    data_size = dwarf_info.access_size;
     data_size_corrected = true;
   }
   size_t min_cache_lines_needed = (message.no_data_items() * data_size + L2_cache_line_size - 1) / L2_cache_line_size;
@@ -275,7 +285,7 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   // instrumentation level that are combined into larger units at the ISA level. If we encounter
   // this, we drop the message. There may be pathetic memory access cases that are missed
   // by this heuristic.
-  if (data_size_corrected and cache_lines_used <= min_cache_lines_needed + 1) {
+  if (data_size_corrected and cache_lines_used == min_cache_lines_needed + 1) {
     return true;
   }
 
@@ -311,10 +321,24 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
     printf("\n");
   }
 
-  access_counts_t &counts = cache_line_use_counts[message.wave_header().dwarf_line][rw_kind][data_size];
-  ++counts.no_accesses;
-  counts.min_cache_lines_needed += min_cache_lines_needed;
-  counts.cache_lines_used += cache_lines_used;
+  // new method of tracking accesses;
+  auto line = message.wave_header().dwarf_line;
+  auto column = message.wave_header().dwarf_column;
+  const auto &fname = dwarf_info.fname;
+  auto &accesses = global_accesses[fname][line][column]; // reference to std::vector of global_accesses_t
+
+  size_t no_accesses = 1;
+  auto isa_access_size = dwarf_info.access_size;
+  const auto &isa_instruction = dwarf_info.isa_instruction;
+  global_accesses_t current_access{
+      {no_accesses, ir_data_size, isa_access_size, rw_kind, isa_instruction}, min_cache_lines_needed, cache_lines_used};
+  auto it = find(accesses.begin(), accesses.end(), current_access);
+  if (it != accesses.end()) {
+    it->min_cache_lines_needed += min_cache_lines_needed;
+    it->no_cache_lines_used += cache_lines_used;
+  } else {
+    accesses.push_back(current_access);
+  }
 
   return true;
 }
@@ -391,19 +415,20 @@ void memory_analysis_handler_t::report_bank_conflicts() {
 void memory_analysis_handler_t::report_cache_line_use() {
   printf("\n=== L2 cache line use report ======================\n");
   bool found_excess = false;
-  for (const auto &[loc, rw2s2ac] : cache_line_use_counts) {
-    bool found_excess_for_location = false;
-    for (const auto &[rw_kind, s2ac] : rw2s2ac) {
-      for (const auto &[size, counts] : s2ac) {
-        if (counts.cache_lines_used > counts.min_cache_lines_needed != 0) {
-          if (!found_excess_for_location) {
-            printf("Excessive number of cache lines used for location %u\n", loc);
-            found_excess_for_location = true;
+  for (const auto &[fname, line_col] : global_accesses) {
+    for (const auto &[line, col_accesses] : line_col) {
+      for (const auto &[col, accesses] : col_accesses) {
+        for (const auto &access : accesses) {
+          if (not verbose_ and access.no_cache_lines_used == access.min_cache_lines_needed) {
+            continue;
           }
           found_excess = true;
-          std::string rw_string = rw2str(rw_kind, rw2str_map);
-          printf("\t%s of %u bytes/lane: executed %zu times, %zu cache lines needed, %zu cache lines used\n",
-                 rw_string.c_str(), size, counts.no_accesses, counts.min_cache_lines_needed, counts.cache_lines_used);
+          printf("%s:%u:%u\n", fname.c_str(), line, col);
+          std::string rw_string = rw2str(access.rw_kind, rw2str_map);
+          printf("\t%s of %u bytes at IR level (%u bytes at ISA level: \"%s\")\n", rw_string.c_str(),
+                 access.ir_access_size, access.isa_access_size, access.isa_instruction.c_str());
+          printf("\texecuted %lu times, %lu cache lines needed, %lu cache lines used\n", access.no_accesses,
+                 access.min_cache_lines_needed, access.no_cache_lines_used);
         }
       }
     }
@@ -427,7 +452,8 @@ void memory_analysis_handler_t::report() {
 }
 
 void memory_analysis_handler_t::clear() {
+  global_accesses.clear();
+  lds_accesses.clear();
   bank_conflict_counts.clear();
-  cache_line_use_counts.clear();
 }
 } // namespace dh_comms

@@ -292,7 +292,7 @@ __attribute__((used)) extern "C" __device__ inline void v_submit_address(
     uint32_t dwarf_column,     //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint8_t rw_kind,           // use 2 bits: 0b01 = read, 0b10 = write, 0b11 = modify (e.g., atomic add)
     uint8_t memory_space,      // use 4 bits (don't need that many on current hardware)
-    uint16_t sizeof_pointee) { // use 26 bits (unlikely large for GPU code)
+    uint16_t sizeof_pointee) { // use 16 bits (unlikely large for GPU code)
   uint32_t user_type = message_type::address;
   uint32_t user_data = rw_kind & 0b11;
   user_data |= ((memory_space & 0xf) << 2);

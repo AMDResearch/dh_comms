@@ -88,23 +88,51 @@ private:
   //! Maps each of the supported memory access sizes to the conflict sets for that size
   std::map<std::size_t, std::vector<conflict_set>> conflict_sets;
 
-  struct access_counts_t {
+  struct memory_accesses_t {
     size_t no_accesses = 0;
-    size_t min_cache_lines_needed;
-    size_t cache_lines_used;
+    uint16_t ir_access_size = 0;
+    uint16_t isa_access_size = 0;
+    uint8_t rw_kind = 0;
+    std::string isa_instruction;
+
+    bool operator==(const memory_accesses_t &other) {
+      return ir_access_size == other.ir_access_size and isa_access_size == other.isa_access_size and
+             rw_kind == other.rw_kind;
+    }
+    bool operator!=(const memory_accesses_t &other) { return not operator==(other); };
   };
-  using s2ac_t = std::map<uint8_t, access_counts_t>; // maps size of the global reads/writes to cache line use counts
-  using rw2s2ac_t = std::map<uint8_t, s2ac_t>;       // maps operation type (read/write) to s2ac_t;
-  using l2rw2s2ac_t = std::map<uint32_t, rw2s2ac_t>; // maps location identifier to rw2s2ac_t
-  //! Cache line counts are tracked for each location, memory access type (read or write), and the size of the access.
-  //! For each combination, we keep track of how often there was an access, what the minimum number of cache lines
-  //! needed was if the data accessed by the active lanes was consecutive and cache line aligned for each access,
-  //! and how many cache lines were actually used
-  l2rw2s2ac_t cache_line_use_counts;
+
+  struct lds_accesses_t : memory_accesses_t {
+    size_t no_bank_conflicts = 0;
+  };
+
+  struct global_accesses_t : memory_accesses_t {
+    size_t min_cache_lines_needed = 0;
+    size_t no_cache_lines_used = 0;
+  };
+
+  // We may have multiple memory accesses for a source code location, e.g. in expressions like "a += b;"
+  // define a hierarchical data structure to map file/line/column to a set of memory accesses with associated data.
+  template <typename T> using memory_access_set_t = std::vector<T>;
+  template <typename T> using col_access_t = std::map<uint16_t, memory_access_set_t<T>>;
+  template <typename T> using line_col_access_t = std::map<uint16_t, col_access_t<T>>;
+  template <typename T> using file_line_col_access_t = std::map<std::string, line_col_access_t<T>>;
+
+  file_line_col_access_t<global_accesses_t> global_accesses;
+  file_line_col_access_t<lds_accesses_t> lds_accesses;
+
   kernelDB::kernelDB *kdb_p = nullptr;
   std::string kernel_name = "";
   bool verbose_;
   const std::map<uint8_t, const char *> rw2str_map;
-  const std::map<std::string, uint16_t> instr_size_map;
+
+public:
+  struct access_size_and_type {
+    uint16_t size;
+    uint8_t access_type;
+  };
+
+private:
+  const std::map<std::string, access_size_and_type> instr_size_map;
 };
 } // namespace dh_comms
