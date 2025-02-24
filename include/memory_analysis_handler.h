@@ -82,16 +82,6 @@ private:
     uint16_t isa_access_size = 0;
     uint8_t rw_kind = 0;
     std::string isa_instruction;
-
-    // Compare only the fields that we care about. This operator also compares objects of derived
-    // structs, which involves slicing (i.e., ignoring the additional fields in the derived structs).
-    // Normally, slicing is unwanted, but here it is actually wanted: we don't care about the additional
-    // fields of the derived structs in the comparison.
-    bool operator==(const memory_accesses_t &other) {
-      return ir_access_size == other.ir_access_size and isa_access_size == other.isa_access_size and
-             rw_kind == other.rw_kind;
-    }
-    bool operator!=(const memory_accesses_t &other) { return not operator==(other); };
   };
 
   struct lds_accesses_t : memory_accesses_t {

@@ -330,7 +330,11 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
   const auto &isa_instruction = dwarf_info.isa_instruction;
   global_accesses_t current_access{
       {no_accesses, ir_data_size, isa_access_size, rw_kind, isa_instruction}, min_cache_lines_needed, cache_lines_used};
-  auto it = find(accesses.begin(), accesses.end(), current_access);
+  auto it = std::find_if(accesses.begin(), accesses.end(), [&current_access](const memory_accesses_t &access) {
+    return access.ir_access_size == current_access.ir_access_size &&
+           access.isa_access_size == current_access.isa_access_size && access.rw_kind == current_access.rw_kind;
+  });
+
   if (it != accesses.end()) {
     ++(it->no_accesses);
     it->min_cache_lines_needed += min_cache_lines_needed;
@@ -396,7 +400,10 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
   std::string isa_instruction = "";
   lds_accesses_t current_access{{no_accesses, data_size, isa_access_size, rw_kind, isa_instruction},
                                 bank_conflict_count};
-  auto it = find(accesses.begin(), accesses.end(), current_access);
+  auto it = std::find_if(accesses.begin(), accesses.end(), [&current_access](const memory_accesses_t &access) {
+    return access.ir_access_size == current_access.ir_access_size &&
+           access.isa_access_size == current_access.isa_access_size && access.rw_kind == current_access.rw_kind;
+  });
   if (it != accesses.end()) {
     ++(it->no_accesses);
     it->no_bank_conflicts += bank_conflict_count;
