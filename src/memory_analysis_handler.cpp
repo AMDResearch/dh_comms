@@ -437,14 +437,21 @@ void show_line(const std::string &fname, uint16_t line, uint16_t column) {
   if (line == 0 || line > cached_lines.size())
     return;
 
-  // Retrieve and process the requested line
-  std::string processed_line;
-  for (char ch : cached_lines[line - 1]) {
-    if (ch == '\t') {
-      processed_line.append(8, ' '); // Replace tab with 8 spaces
-    } else {
-      processed_line += ch;
-    }
+  // Retrieve and process the requested line: replace each tab by 8 spaces
+  std::string processed_line = cached_lines[line - 1];
+
+  // Precompute required space
+  size_t tab_count = std::count(processed_line.begin(), processed_line.end(), '\t');
+  size_t final_size = processed_line.size() + tab_count * 7; // Each tab adds 7 extra spaces
+
+  // Reserve space to prevent multiple reallocations
+  processed_line.reserve(final_size);
+
+  // Replace tabs
+  size_t pos = 0;
+  while ((pos = processed_line.find('\t', pos)) != std::string::npos) {
+    processed_line.replace(pos, 1, "        "); // Replace '\t' with 8 spaces
+    pos += 8;                                   // Move past the replacement
   }
 
   // Print the processed line
