@@ -414,6 +414,48 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
   return true;
 }
 
+void show_line(const std::string &fname, uint16_t line, uint16_t column) {
+  static std::string cached_fname;
+  static std::vector<std::string> cached_lines;
+
+  // If accessing a new file, clear the old cache and read new file
+  if (fname != cached_fname) {
+    cached_fname = fname;
+    cached_lines.clear();
+
+    std::ifstream file(fname);
+    if (!file)
+      return; // Return silently if file cannot be opened
+
+    std::string line_content;
+    while (std::getline(file, line_content)) {
+      cached_lines.push_back(line_content);
+    }
+  }
+
+  // Check if the requested line is out of bounds
+  if (line == 0 || line > cached_lines.size())
+    return;
+
+  // Retrieve and process the requested line
+  std::string processed_line;
+  for (char ch : cached_lines[line - 1]) {
+    if (ch == '\t') {
+      processed_line.append(8, ' '); // Replace tab with 8 spaces
+    } else {
+      processed_line += ch;
+    }
+  }
+
+  // Print the processed line
+  printf("%s\n", processed_line.c_str());
+
+  // Print the caret marker at the specified column (c-1 spaces + '^')
+  if (column > 0) {
+    printf("%*s^\n", column - 1, ""); // Print (column-1) spaces before caret
+  }
+}
+
 void memory_analysis_handler_t::report_bank_conflicts() {
   printf("\n=== Bank conflicts report =========================\n");
   bool found_bank_conflict = false;
@@ -426,6 +468,7 @@ void memory_analysis_handler_t::report_bank_conflicts() {
           }
           found_bank_conflict = true;
           printf("%s:%u:%u\n", fname.c_str(), line, col);
+          show_line(fname, line, col);
           std::string rw_string = rw2str(access.rw_kind, rw2str_map);
           printf("\t%s of %u bytes at IR level\n", rw_string.c_str(), access.ir_access_size);
           printf("\texecuted %lu times, %lu bank conflicts in total\n", access.no_accesses, access.no_bank_conflicts);
@@ -451,6 +494,7 @@ void memory_analysis_handler_t::report_cache_line_use() {
           }
           found_excess = true;
           printf("%s:%u:%u\n", fname.c_str(), line, col);
+          show_line(fname, line, col);
           std::string rw_string = rw2str(access.rw_kind, rw2str_map);
           printf("\t%s of %u bytes at IR level (%u bytes at ISA level: \"%s\")\n", rw_string.c_str(),
                  access.ir_access_size, access.isa_access_size, access.isa_instruction.c_str());
