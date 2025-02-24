@@ -61,8 +61,7 @@ void conflict_set::clear() {
 }
 
 memory_analysis_handler_t::memory_analysis_handler_t(bool verbose)
-    : bank_conflict_counts(),
-      conflict_sets(),
+    : conflict_sets(),
       verbose_(verbose),
       rw2str_map{
           {dh_comms::memory_access::undefined, "unspecified memory operation"},
@@ -321,7 +320,6 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
     printf("\n");
   }
 
-  // new method of tracking accesses;
   auto line = message.wave_header().dwarf_line;
   auto column = message.wave_header().dwarf_column;
   const auto &fname = dwarf_info.fname;
@@ -334,11 +332,17 @@ bool memory_analysis_handler_t::handle_cache_line_count_analysis(const message_t
       {no_accesses, ir_data_size, isa_access_size, rw_kind, isa_instruction}, min_cache_lines_needed, cache_lines_used};
   auto it = find(accesses.begin(), accesses.end(), current_access);
   if (it != accesses.end()) {
+    ++(it->no_accesses);
     it->min_cache_lines_needed += min_cache_lines_needed;
     it->no_cache_lines_used += cache_lines_used;
   } else {
     accesses.push_back(current_access);
   }
+
+  // kernelDB currently doesn't save info for ds_read and ds_write instructions,
+  // so to be able to figure out the source file name for theses instructions,
+  // we save a mapping while processing global loads and stores.
+  fname_hash_to_fname[message.wave_header().dwarf_fname_hash] = fname;
 
   return true;
 }
@@ -379,34 +383,50 @@ bool memory_analysis_handler_t::handle_bank_conflict_analysis(const message_t &m
            exec2binstr(message.wave_header().exec).c_str());
   }
 
-  counts_t &counts = bank_conflict_counts[message.wave_header().dwarf_line][rw_kind][data_size];
-  ++counts.no_accesses;
-  counts.no_conflicts += bank_conflict_count;
+  auto line = message.wave_header().dwarf_line;
+  auto column = message.wave_header().dwarf_column;
+  auto fname = fname_hash_to_fname[message.wave_header().dwarf_fname_hash];
+  if (fname == "") {
+    fname = "<unknown source file>";
+  }
+  auto &accesses = lds_accesses[fname][line][column]; // reference to std::vector of lds_accesses_t
+
+  size_t no_accesses = 1;
+  uint16_t isa_access_size = 0; // kernelDB currently doesn't handle LDS instructions yet.
+  std::string isa_instruction = "";
+  lds_accesses_t current_access{{no_accesses, data_size, isa_access_size, rw_kind, isa_instruction},
+                                bank_conflict_count};
+  auto it = find(accesses.begin(), accesses.end(), current_access);
+  if (it != accesses.end()) {
+    ++(it->no_accesses);
+    it->no_bank_conflicts += bank_conflict_count;
+  } else {
+    accesses.push_back(current_access);
+  }
 
   return true;
 }
 
 void memory_analysis_handler_t::report_bank_conflicts() {
   printf("\n=== Bank conflicts report =========================\n");
-  bool found_conflicts = false;
-  for (const auto &[loc, rw2s2c] : bank_conflict_counts) {
-    bool found_conflicts_for_location = false;
-    for (const auto &[rw_kind, s2c] : rw2s2c) {
-      for (const auto &[size, counts] : s2c) {
-        if (counts.no_conflicts != 0) {
-          if (!found_conflicts_for_location) {
-            printf("bank conflicts for location %u\n", loc);
-            found_conflicts_for_location = true;
+  bool found_bank_conflict = false;
+  for (const auto &[fname, line_col] : lds_accesses) {
+    for (const auto &[line, col_accesses] : line_col) {
+      for (const auto &[col, accesses] : col_accesses) {
+        for (const auto &access : accesses) {
+          if (not verbose_ and access.no_bank_conflicts == 0) {
+            continue;
           }
-          found_conflicts = true;
-          std::string rw_string = rw2str(rw_kind, rw2str_map);
-          printf("\t%s of %u bytes/lane: executed %zu times, %zu total bank conflict(s)\n", rw_string.c_str(), size,
-                 counts.no_accesses, counts.no_conflicts);
+          found_bank_conflict = true;
+          printf("%s:%u:%u\n", fname.c_str(), line, col);
+          std::string rw_string = rw2str(access.rw_kind, rw2str_map);
+          printf("\t%s of %u bytes at IR level\n", rw_string.c_str(), access.ir_access_size);
+          printf("\texecuted %lu times, %lu bank conflicts in total\n", access.no_accesses, access.no_bank_conflicts);
         }
       }
     }
   }
-  if (!found_conflicts) {
+  if (!found_bank_conflict) {
     printf("No bank conflicts found\n");
   }
   printf("=== End of bank conflicts report ====================\n");
@@ -454,6 +474,5 @@ void memory_analysis_handler_t::report() {
 void memory_analysis_handler_t::clear() {
   global_accesses.clear();
   lds_accesses.clear();
-  bank_conflict_counts.clear();
 }
 } // namespace dh_comms

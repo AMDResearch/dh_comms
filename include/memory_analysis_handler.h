@@ -73,18 +73,6 @@ private:
   void report_bank_conflicts();
 
 private:
-  struct counts_t {
-    size_t no_accesses = 0;
-    size_t no_conflicts = 0;
-  };
-  using s2c_t = std::map<uint8_t, counts_t>;       //!< maps size of the LDS reads/writes to bank conflict counts
-  using rw2s2c_t = std::map<uint8_t, s2c_t>;       //!< maps operation type (read/write) to s2c_t;
-  using l2rw2s2c_t = std::map<uint32_t, rw2s2c_t>; //!< maps location identifier to rw2s2c_t
-  //! Bank conflict counts are tracked for each location, memory access type (read or write), and size of the
-  //! access. For each combination, we keep track of how often there was an access, and how many bank conflicts
-  //! occurred.
-  l2rw2s2c_t bank_conflict_counts;
-
   //! Maps each of the supported memory access sizes to the conflict sets for that size
   std::map<std::size_t, std::vector<conflict_set>> conflict_sets;
 
@@ -95,6 +83,10 @@ private:
     uint8_t rw_kind = 0;
     std::string isa_instruction;
 
+    // Compare only the fields that we care about. This operator also compares objects of derived
+    // structs, which involves slicing (i.e., ignoring the additional fields in the derived structs).
+    // Normally, slicing is unwanted, but here it is actually wanted: we don't care about the additional
+    // fields of the derived structs in the comparison.
     bool operator==(const memory_accesses_t &other) {
       return ir_access_size == other.ir_access_size and isa_access_size == other.isa_access_size and
              rw_kind == other.rw_kind;
@@ -134,5 +126,6 @@ public:
 
 private:
   const std::map<std::string, access_size_and_type> instr_size_map;
+  std::map<uint64_t, std::string> fname_hash_to_fname;
 };
 } // namespace dh_comms
