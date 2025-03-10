@@ -57,25 +57,14 @@ message(STATUS "==> To change install dirs, rerun cmake with argument \"-DCMAKE_
 add_subdirectory(examples)
 add_subdirectory(doc)
 
-# Create bitcode files for use in kernel instrumentation
-
-set(DH_COMMS_SUPPORTED_ARCHS gfx906 gfx908 gfx90a gfx940 gfx941 gfx942)
-foreach(arch ${DH_COMMS_SUPPORTED_ARCHS})
-    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev.co4.${arch}.bc)
-    list(APPEND DH_COMMS_BITCODE_FILES ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev.co5.${arch}.bc)
-    list(APPEND DH_COMMS_OFFLOAD_ARCHS "--offload-arch=${arch}")
-endforeach()
-
 add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS}
-            -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}> -mcode-object-version=4 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
-    COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co4.gfx/'` \; done
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header ${DH_COMMS_OFFLOAD_ARCHS} -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
-            -O3 -mcode-object-version=5 -x hip -c -save-temps ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
-    COMMAND for f in dh_comms*-hip-*[0-9a].bc \; do mv $$f `echo $$f | sed 's/^.*-gfx/lib\\/dh_comms_dev.co5.gfx/'` \; done
-    COMMAND rm -f dh_comms_dev-hip* dh_comms_dev-host* dh_comms_dev*hipfb dh_comms_dev.o
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+            -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}> -x hip --cuda-device-only -emit-llvm
+            -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h -o lib/dh_comms_dev.ll
+    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev.ll
+    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev.ll -o lib/dh_comms_dev.bc
     COMMAND touch dh_comms_bc.stamp
     DEPENDS include/dh_comms_dev.h
 )
@@ -87,6 +76,6 @@ add_custom_target(dh_comms_bc ALL
 set_property(TARGET dh_comms_bc APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${DH_COMMS_BITCODE_FILES})
 
 install(PROGRAMS
-    ${DH_COMMS_BITCODE_FILES}
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev.bc
     DESTINATION lib
 )
