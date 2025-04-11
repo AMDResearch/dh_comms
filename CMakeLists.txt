@@ -60,11 +60,22 @@ add_subdirectory(doc)
 add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
+    # Generate co4 version (code object version 4)
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=4
+        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}> -x hip
+        --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+        -o lib/dh_comms_dev_co4.ll
+    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_co4.ll
+    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_co4.ll -o lib/dh_comms_dev_co4.bc
+    # Generate co5 version (default code object version 5)
     COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
-            -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH} $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}> -x hip --cuda-device-only -emit-llvm
-            -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h -o lib/dh_comms_dev.ll
-    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev.ll
-    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev.ll -o lib/dh_comms_dev.bc
+        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}> -x hip
+        --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+        -o lib/dh_comms_dev_co5.ll
+    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_co5.ll
+    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_co5.ll -o lib/dh_comms_dev_co5.bc
     COMMAND touch dh_comms_bc.stamp
     DEPENDS include/dh_comms_dev.h
 )
@@ -76,6 +87,7 @@ add_custom_target(dh_comms_bc ALL
 set_property(TARGET dh_comms_bc APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${DH_COMMS_BITCODE_FILES})
 
 install(PROGRAMS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_co4.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_co5.bc
     DESTINATION lib
 )
