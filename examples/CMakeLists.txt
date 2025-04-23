@@ -13,6 +13,7 @@ PRIVATE
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
     ${HSA_KMT_LIB_PATH}/..
+    ${LIBDWARF_INCLUDE_DIR}
     )
 target_link_options(heatmap_example PRIVATE -fgpu-rdc)
 target_link_libraries(heatmap_example PRIVATE dh_comms)
@@ -33,6 +34,7 @@ PRIVATE
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
     ${HSA_KMT_LIB_PATH}/..
+    ${LIBDWARF_INCLUDE_DIR}
     )
 target_link_options(bank_conflicts_example PRIVATE -fgpu-rdc)
 target_link_libraries(bank_conflicts_example PRIVATE dh_comms)
@@ -53,6 +55,7 @@ PRIVATE
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
     ${HSA_KMT_LIB_PATH}/..
+    ${LIBDWARF_INCLUDE_DIR}
     )
 target_link_options(memory_alignment_example PRIVATE -fgpu-rdc)
 target_link_libraries(memory_alignment_example PRIVATE dh_comms)
