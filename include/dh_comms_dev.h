@@ -301,10 +301,16 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_message(
 //! \brief Submit a a single wave header; no lane headers, no message data.
 //!
 //! Messages are submitted on a per-wave basis, and only the first active lane in the wave submits.
-__device__ inline void
-s_submit_wave_header(dh_comms_descriptor *rsrc) //!< Pointer to dh_comms device resources used for message submission.
+__attribute__((used)) extern "C" __device__ inline void s_submit_wave_header(
+    dh_comms_descriptor *rsrc,     //!< Pointer to dh_comms device resources used for message submission.
+    uint64_t dwarf_fname_hash = 0, //!< Hash of the source file from which v_submit_message() is called.
+    uint32_t dwarf_line =
+        0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
+    uint32_t dwarf_column =
+        0xffffffff) //!< Column of the instrumented instruction for which v_submit_message() is called.
+
 {
-  s_submit_message(rsrc);
+  s_submit_message(rsrc, nullptr, 0, false, dwarf_fname_hash, dwarf_line, dwarf_column);
 }
 
 __attribute__((used)) extern "C" __device__ inline void v_submit_address(
