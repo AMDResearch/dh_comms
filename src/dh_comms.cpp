@@ -192,7 +192,10 @@ void dh_comms::delete_handlers() {
 
 void dh_comms::report(bool auto_clear_states) {
   assert(not running_);
-  message_handler_chain_.report();
+  if (kdb_)
+    message_handler_chain_.report(kernel_name_, *kdb_);
+  else
+    message_handler_chain_.report();
 
   const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
   double MiBps = bytes_processed_ / processing_time.count() / 1.0e6;

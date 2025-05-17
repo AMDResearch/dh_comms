@@ -69,7 +69,7 @@ void message_handler_chain_t::report(const std::string& kernel_name, kernelDB::k
         kdb.getKernelLines(kernel_name, lines);
     }
     for (auto &mh : message_handlers_) {
-        mh->report();
+        mh->report(kernel_name, kdb);
     }
 }
 
