@@ -189,6 +189,7 @@ void dh_comms::delete_handlers() {
   message_handler_chain_.clear();
 }
 
+
 void dh_comms::report(bool auto_clear_states) {
   assert(not running_);
   message_handler_chain_.report();

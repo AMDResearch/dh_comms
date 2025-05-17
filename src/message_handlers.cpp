@@ -60,6 +60,7 @@ void message_handler_chain_t::report() {
   }
 }
 
+
 void message_handler_chain_t::report(const std::string& kernel_name, kernelDB::kernelDB& kdb)
 {
     if (kernel_name.length() == 0)
