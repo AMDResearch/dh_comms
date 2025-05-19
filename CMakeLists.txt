@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 project(dh_comms LANGUAGES HIP CXX)
 find_package(hip REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 if("${CMAKE_BUILD_TYPE}" STREQUAL "")
     set(CMAKE_BUILD_TYPE "RelWithDebInfo")
@@ -39,6 +40,7 @@ target_link_libraries(
     dh_comms
 PRIVATE
     kernelDB64
+    nlohmann_json::nlohmann_json
 )
 
 target_link_options(dh_comms PRIVATE -fgpu-rdc)
