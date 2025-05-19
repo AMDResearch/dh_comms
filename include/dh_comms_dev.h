@@ -333,7 +333,13 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_time_interval(
     uint64_t dwarf_fname_hash = 0, //!< Hash of the source file from which v_submit_message() is called.
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
-    uint32_t dwarf_column = 0xffffffff) {
-  s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), false, dwarf_fname_hash, dwarf_line, dwarf_column, 1);
+    uint32_t dwarf_column = 0xffffffff, //!
+    uint32_t user_data = 0xffffffff)    //!< Auxiliary data; use depends on user_type.
+{
+  s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), /* submit_lane_headers */ false, dwarf_fname_hash,
+                   dwarf_line, dwarf_column, /* user_type */ 1, user_data);
 }
+
+__attribute__((used)) extern "C" __device__ inline uint64_t s_clock64() { return __clock64(); }
+
 } // namespace dh_comms
