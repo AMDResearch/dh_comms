@@ -485,8 +485,37 @@ void show_line(const std::string &fname, uint16_t line, uint16_t column) {
   }
 }
 
+std::string memory_analysis_handler_t::get_code_context(const std::string &fname, uint16_t line) {
+  static std::string cached_fname;
+  static std::vector<std::string> cached_lines;
+
+  // If accessing a new file, clear the old cache and read new file
+  if (fname != cached_fname) {
+    cached_fname = fname;
+    cached_lines.clear();
+
+    std::ifstream file(fname);
+    if (!file)
+      return ""; // Return empty string if file cannot be opened
+
+    std::string line_content;
+    while (std::getline(file, line_content)) {
+      cached_lines.push_back(line_content);
+    }
+  }
+
+  // Check if the requested line is out of bounds
+  if (line == 0 || line > cached_lines.size())
+    return "";
+
+  return cached_lines[line - 1];
+}
+
 void memory_analysis_handler_t::report_bank_conflicts() {
-  printf("\n=== Bank conflicts report =========================\n");
+  if (verbose_) {
+    printf("\n=== Bank conflicts report =========================\n");
+  }
+  
   bool found_bank_conflict = false;
   for (const auto &[fname, line_col] : lds_accesses) {
     for (const auto &[line, col_accesses] : line_col) {
@@ -496,23 +525,43 @@ void memory_analysis_handler_t::report_bank_conflicts() {
             continue;
           }
           found_bank_conflict = true;
-          printf("%s:%u:%u\n", fname.c_str(), line, col);
-          show_line(fname, line, col);
+          
+          std::string code_context = get_code_context(fname, line);
           std::string rw_string = rw2str(access.rw_kind, rw2str_map);
-          printf("\t%s of %u bytes at IR level\n", rw_string.c_str(), access.ir_access_size);
-          printf("\texecuted %lu times, %lu bank conflicts in total\n", access.no_accesses, access.no_bank_conflicts);
+          
+          if (verbose_) {
+            printf("%s:%u:%u\n", fname.c_str(), line, col);
+            show_line(fname, line, col);
+            printf("\t%s of %u bytes at IR level\n", rw_string.c_str(), access.ir_access_size);
+            printf("\texecuted %lu times, %lu bank conflicts in total\n", access.no_accesses, access.no_bank_conflicts);
+          }
+          
+          JsonOutputManager::getInstance().addBankConflict(
+            fname, line, col,
+            code_context,
+            rw_string,
+            access.ir_access_size,
+            access.no_accesses,
+            access.no_bank_conflicts
+          );
         }
       }
     }
   }
-  if (!found_bank_conflict) {
-    printf("No bank conflicts found\n");
+  
+  if (verbose_) {
+    if (!found_bank_conflict) {
+      printf("No bank conflicts found\n");
+    }
+    printf("=== End of bank conflicts report ====================\n");
   }
-  printf("=== End of bank conflicts report ====================\n");
 }
 
 void memory_analysis_handler_t::report_cache_line_use() {
-  printf("\n=== L2 cache line use report ======================\n");
+  if (verbose_) {
+    printf("\n=== L2 cache line use report ======================\n");
+  }
+  
   bool found_excess = false;
   for (const auto &[fname, line_col] : global_accesses) {
     for (const auto &[line, col_accesses] : line_col) {
@@ -522,21 +571,41 @@ void memory_analysis_handler_t::report_cache_line_use() {
             continue;
           }
           found_excess = true;
-          printf("%s:%u:%u\n", fname.c_str(), line, col);
-          show_line(fname, line, col);
+          
+          std::string code_context = get_code_context(fname, line);
           std::string rw_string = rw2str(access.rw_kind, rw2str_map);
-          printf("\t%s of %u bytes at IR level (%u bytes at ISA level: \"%s\")\n", rw_string.c_str(),
-                 access.ir_access_size, access.isa_access_size, access.isa_instruction.c_str());
-          printf("\texecuted %lu times, %lu cache lines needed, %lu cache lines used\n", access.no_accesses,
-                 access.min_cache_lines_needed, access.no_cache_lines_used);
+          
+          if (verbose_) {
+            printf("%s:%u:%u\n", fname.c_str(), line, col);
+            show_line(fname, line, col);
+            printf("\t%s of %u bytes at IR level (%u bytes at ISA level: \"%s\")\n", rw_string.c_str(),
+                   access.ir_access_size, access.isa_access_size, access.isa_instruction.c_str());
+            printf("\texecuted %lu times, %lu cache lines needed, %lu cache lines used\n", access.no_accesses,
+                   access.min_cache_lines_needed, access.no_cache_lines_used);
+          }
+          
+          JsonOutputManager::getInstance().addCacheAnalysis(
+            fname, line, col,
+            code_context,
+            rw_string,
+            access.ir_access_size,
+            access.isa_access_size,
+            access.isa_instruction,
+            access.no_accesses,
+            access.min_cache_lines_needed,
+            access.no_cache_lines_used
+          );
         }
       }
     }
   }
-  if (!found_excess) {
-    printf("No excess cache lines used for global memory accesses\n");
+  
+  if (verbose_) {
+    if (!found_excess) {
+      printf("No excess cache lines used for global memory accesses\n");
+    }
+    printf("=== End of L2 cache line use report ===============\n");
   }
-  printf("=== End of L2 cache line use report ===============\n");
 }
 
 void memory_analysis_handler_t::report(const std::string &kernel_name, kernelDB::kernelDB &kdb) {

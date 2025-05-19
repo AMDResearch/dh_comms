@@ -22,6 +22,7 @@
 
 #pragma once
 #include "message_handlers.h"
+#include "json_output.h"
 
 #include <map>
 #include <set>
@@ -93,6 +94,7 @@ private:
   bool handle_cache_line_count_analysis(const message_t &message);
   void report_cache_line_use();
   void report_bank_conflicts();
+  std::string get_code_context(const std::string &fname, uint16_t line);
 
 private:
   //! Maps each of the supported memory access sizes to the conflict sets for that size
