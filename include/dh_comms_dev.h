@@ -307,10 +307,12 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_wave_header(
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column =
-        0xffffffff) //!< Column of the instrumented instruction for which v_submit_message() is called.
-
+        0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
+    uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
+                                     //!< code that processes the messages.
+    uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
 {
-  s_submit_message(rsrc, nullptr, 0, false, dwarf_fname_hash, dwarf_line, dwarf_column);
+  s_submit_message(rsrc, nullptr, 0, false, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
 }
 
 __attribute__((used)) extern "C" __device__ inline void v_submit_address(
