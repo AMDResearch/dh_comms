@@ -29,6 +29,7 @@
 #include <hip/hip_runtime.h>
 #include <set>
 #include <string>
+#include <iostream>
 
 namespace {
 constexpr size_t no_banks = 32;
@@ -489,25 +490,36 @@ std::string memory_analysis_handler_t::get_code_context(const std::string &fname
   static std::string cached_fname;
   static std::vector<std::string> cached_lines;
 
+  std::cout << "[CodeContext] Retrieving context for " << fname << ":" << line << std::endl;
+
   // If accessing a new file, clear the old cache and read new file
   if (fname != cached_fname) {
+    std::cout << "[CodeContext] Cache miss - loading new file: " << fname << std::endl;
     cached_fname = fname;
     cached_lines.clear();
 
     std::ifstream file(fname);
-    if (!file)
-      return ""; // Return empty string if file cannot be opened
+    if (!file) {
+      std::cout << "[CodeContext] ERROR: Could not open file: " << fname << std::endl;
+      return "";  // Return empty string if file cannot be opened
+    }
 
     std::string line_content;
     while (std::getline(file, line_content)) {
       cached_lines.push_back(line_content);
     }
+    std::cout << "[CodeContext] Cached " << cached_lines.size() << " lines from file" << std::endl;
+  } else {
+    std::cout << "[CodeContext] Using cached contents for: " << fname << std::endl;
   }
 
   // Check if the requested line is out of bounds
-  if (line == 0 || line > cached_lines.size())
+  if (line == 0 || line > cached_lines.size()) {
+    std::cout << "[CodeContext] ERROR: Line " << line << " is out of bounds (max: " << cached_lines.size() << ")" << std::endl;
     return "";
+  }
 
+  std::cout << "[CodeContext] Retrieved line " << line << ": " << cached_lines[line - 1] << std::endl;
   return cached_lines[line - 1];
 }
 
@@ -544,6 +556,9 @@ void memory_analysis_handler_t::report_bank_conflicts() {
             access.no_accesses,
             access.no_bank_conflicts
           );
+          
+          std::cout << "[DEBUG] After addBankConflict - Current kernel analyses size: " 
+                    << JsonOutputManager::getInstance().getCurrentAnalysisSize() << std::endl;
         }
       }
     }
@@ -595,6 +610,9 @@ void memory_analysis_handler_t::report_cache_line_use() {
             access.min_cache_lines_needed,
             access.no_cache_lines_used
           );
+          
+          std::cout << "[DEBUG] After addCacheAnalysis - Current kernel analyses size: " 
+                    << JsonOutputManager::getInstance().getCurrentAnalysisSize() << std::endl;
         }
       }
     }
@@ -616,8 +634,17 @@ void memory_analysis_handler_t::report(const std::string &kernel_name, kernelDB:
   report();
 }
 void memory_analysis_handler_t::report() {
+  std::cout << "[MemoryAnalysisHandler] Starting report..." << std::endl;
+  
+  std::cout << "[MemoryAnalysisHandler] Starting cache line use report..." << std::endl;
   report_cache_line_use();
+  std::cout << "[MemoryAnalysisHandler] Completed cache line use report" << std::endl;
+  
+  std::cout << "[MemoryAnalysisHandler] Starting bank conflicts report..." << std::endl;
   report_bank_conflicts();
+  std::cout << "[MemoryAnalysisHandler] Completed bank conflicts report" << std::endl;
+  
+  std::cout << "[MemoryAnalysisHandler] Report completed" << std::endl;
 }
 
 void memory_analysis_handler_t::clear() {
