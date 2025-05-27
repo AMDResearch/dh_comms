@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nlohmann/json.hpp>
+#include <json.h>
 #include <string>
 #include <chrono>
 #include <fstream>
