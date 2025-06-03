@@ -202,9 +202,75 @@ public:
     void writeToFile(const std::string& filename) {
         std::lock_guard<std::mutex> lock(mutex_);
         std::cout << "[JsonOutputManager:" << (void*)this << "] Writing analysis to file: " << filename << std::endl;
+        
+        // Try to read existing file first
+        json existing_data = readFromFile(filename);
+        if (!existing_data.is_null()) {
+            mergeAnalyses(existing_data);
+        }
+        
         std::ofstream out(filename);
         out << current_analysis_.dump(2);
         std::cout << "[JsonOutputManager:" << (void*)this << "] File write complete" << std::endl;
+    }
+
+    // Read JSON from a file, returns null json if file doesn't exist or is invalid
+    json readFromFile(const std::string& filename) {
+        std::ifstream in(filename);
+        if (!in.is_open()) {
+            std::cout << "[JsonOutputManager:" << (void*)this << "] No existing file to read from" << std::endl;
+            return json();
+        }
+
+        try {
+            json data = json::parse(in);
+            std::cout << "[JsonOutputManager:" << (void*)this << "] Successfully read existing file" << std::endl;
+            return data;
+        } catch (const std::exception& e) {
+            std::cerr << "[JsonOutputManager:" << (void*)this << "] Error reading file: " << e.what() << std::endl;
+            return json();
+        }
+    }
+
+    // Merge existing analyses with current analysis
+    void mergeAnalyses(const json& existing_data) {
+        std::cout << "[JsonOutputManager:" << (void*)this << "] Merging analyses..." << std::endl;
+        
+        // If current analysis is empty, just use existing data
+        if (current_analysis_.is_null()) {
+            current_analysis_ = existing_data;
+            return;
+        }
+
+        // Merge kernel analyses arrays
+        if (existing_data.contains("kernel_analyses") && existing_data["kernel_analyses"].is_array()) {
+            // If current_analysis doesn't have kernel_analyses yet, initialize it
+            if (!current_analysis_.contains("kernel_analyses")) {
+                current_analysis_["kernel_analyses"] = json::array();
+            }
+            
+            // Add all existing kernel analyses
+            for (const auto& analysis : existing_data["kernel_analyses"]) {
+                current_analysis_["kernel_analyses"].push_back(analysis);
+            }
+        }
+
+        // Update metadata if needed
+        if (existing_data.contains("metadata")) {
+            // Keep most recent timestamp
+            if (existing_data["metadata"].contains("timestamp")) {
+                current_analysis_["metadata"]["timestamp"] = existing_data["metadata"]["timestamp"];
+            }
+            
+            // Keep highest kernels_found count
+            if (existing_data["metadata"].contains("kernels_found")) {
+                size_t existing_count = existing_data["metadata"]["kernels_found"];
+                size_t current_count = current_analysis_["metadata"]["kernels_found"];
+                current_analysis_["metadata"]["kernels_found"] = std::max(existing_count, current_count);
+            }
+        }
+        
+        std::cout << "[JsonOutputManager:" << (void*)this << "] Analyses merged successfully" << std::endl;
     }
 
     void clear() {
