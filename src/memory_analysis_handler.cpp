@@ -258,7 +258,7 @@ get_dwarf_info(const dh_comms::message_t &message, const std::string &kernel_nam
     return dwarf_info;
   }
 
-  printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
+  //printf("Memory analysis handler: did not find %s in instr_size_map.\n", isa_instruction.c_str());
   return dwarf_info;
 }
 
