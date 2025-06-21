@@ -16,7 +16,7 @@ PRIVATE
     ${LIBDWARF_INCLUDE_DIR}
     )
 target_link_options(heatmap_example PRIVATE -fgpu-rdc)
-target_link_libraries(heatmap_example PRIVATE dh_comms)
+target_link_libraries(heatmap_example PRIVATE dh_comms logDuration64)
 set_target_properties(heatmap_example PROPERTIES RUNTIME_OUTPUT_DIRECTORY bin)
 
 set(BANK_CONFLICTS_EXAMPLE_SOURCES
