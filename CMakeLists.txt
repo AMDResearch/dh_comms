@@ -14,7 +14,6 @@ set(DH_COMMS_SOURCES
     src/message.cpp
     src/message_handlers.cpp
     src/time_interval_handler.cpp
-    src/memory_analysis_handler.cpp
 )
 
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
