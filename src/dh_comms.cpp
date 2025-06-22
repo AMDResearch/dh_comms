@@ -24,7 +24,6 @@
 
 #include "data_headers.h"
 #include "hip_utils.h"
-#include "memory_heatmap.h"
 #include "message.h"
 
 #include <algorithm>
@@ -214,7 +213,7 @@ void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_ha
 
 void dh_comms::install_default_message_handlers() {
   assert(not running_);
-  append_handler(std::make_unique<memory_heatmap_t>());
+  //append_handler(std::make_unique<memory_heatmap_t>());
 }
 
 void dh_comms::processing_loop(bool is_final_loop) {

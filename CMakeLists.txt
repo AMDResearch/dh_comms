@@ -9,7 +9,6 @@ message(STATUS "CMAKE_BUILD_TYPE = " ${CMAKE_BUILD_TYPE})
 
 set(DH_COMMS_SOURCES
     src/dh_comms.cpp
-    src/memory_heatmap.cpp
     src/data_headers.cpp
     src/message.cpp
     src/message_handlers.cpp
