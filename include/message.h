@@ -29,7 +29,7 @@
 namespace dh_comms {
 
 namespace message_type {
-enum : uint32_t { address = 0, time_interval = 1, undefined = 0xffffffff };
+enum : uint32_t { address = 0, time_interval = 1, basic_block_start = 2, undefined = 0xffffffff };
 }
 
 namespace memory_access {
