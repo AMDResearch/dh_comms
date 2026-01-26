@@ -56,26 +56,8 @@ add_subdirectory(doc)
 add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
-    # Generate co4 version (code object version 4) for gfx90a (cdna2)
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=4
-        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
-        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
-        $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
-        --offload-arch=gfx90a --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
-        -o lib/dh_comms_dev_cdna2_co4.ll
-    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna2_co4.ll
-    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna2_co4.ll -o lib/dh_comms_dev_cdna2_co4.bc
-    # Generate co4 version (code object version 4) for gfx942 (cdna3)
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=4
-        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
-        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
-        $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
-        --offload-arch=gfx942 --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
-        -o lib/dh_comms_dev_cdna3_co4.ll
-    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna3_co4.ll
-    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna3_co4.ll -o lib/dh_comms_dev_cdna3_co4.bc
-    # Generate co5 version (default code object version 5) for gfx90a (cdna2)
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+    # Generate co5 version (code object version 5) for gfx90a (cdna2)
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=5
         -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
         $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
         $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
@@ -83,8 +65,8 @@ add_custom_command(
         -o lib/dh_comms_dev_cdna2_co5.ll
     COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna2_co5.ll
     COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna2_co5.ll -o lib/dh_comms_dev_cdna2_co5.bc
-    # Generate co5 version (default code object version 5) for gfx942 (cdna3)
-    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+    # Generate co5 version (code object version 5) for gfx942 (cdna3)
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=5
         -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
         $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
         $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
@@ -92,6 +74,24 @@ add_custom_command(
         -o lib/dh_comms_dev_cdna3_co5.ll
     COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna3_co5.ll
     COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna3_co5.ll -o lib/dh_comms_dev_cdna3_co5.bc
+    # Generate co6 version (default code object version 6) for gfx90a (cdna2)
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
+        $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
+        --offload-arch=gfx90a --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+        -o lib/dh_comms_dev_cdna2_co6.ll
+    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna2_co6.ll
+    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna2_co6.ll -o lib/dh_comms_dev_cdna2_co6.bc
+    # Generate co6 version (default code object version 6) for gfx942 (cdna3)
+    COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+        -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+        $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
+        $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
+        --offload-arch=gfx942 --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+        -o lib/dh_comms_dev_cdna3_co6.ll
+    COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna3_co6.ll
+    COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna3_co6.ll -o lib/dh_comms_dev_cdna3_co6.bc
     COMMAND touch dh_comms_bc.stamp
     DEPENDS include/dh_comms_dev.h
 )
@@ -103,9 +103,9 @@ add_custom_target(dh_comms_bc ALL
 set_property(TARGET dh_comms_bc APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${DH_COMMS_BITCODE_FILES})
 
 install(PROGRAMS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co4.bc
     ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co5.bc
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co4.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co6.bc
     ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co5.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co6.bc
     DESTINATION lib
 )
