@@ -22,14 +22,15 @@
 
 #pragma once
 #include "data_headers.h"
+#include "kernelDB.h"
 #include "message_handlers.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <functional>
 #include <thread>
 #include <vector>
-#include "kernelDB.h"
 
 namespace dh_comms {
 class dh_comms_mem_mgr {
@@ -84,7 +85,7 @@ public:
   dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
            std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
            kernelDB::kernelDB *kdb,
-           bool verbose = false,            //!< Controls how chatty the code is.
+           bool verbose = false, //!< Controls how chatty the code is.
            bool install_default_handlers = false, dh_comms_mem_mgr *mgr = NULL, bool handlers_pass_through = true);
   dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
            std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
@@ -95,13 +96,13 @@ public:
   dh_comms &operator=(const dh_comms &) = delete;
   dh_comms_descriptor *get_dev_rsrc_ptr(); //!< Returns a pointer to a dh_comms_resources struct in device memory.
 
-  void start(); //!< Start the message processing threads on the host.
-  void start(const std::string& kernel_name); //!< Start the message processing threads on the host.
-  void stop();  //!< \brief Stop message processing on the host.
-                //!<
-                //!< It is the responsibility
-                //!< of calling code to make sure kernels have finished by e.g. issuing
-                //!< a hipDeviceSyncronize() or other synchronization call.
+  void start();                               //!< Start the message processing threads on the host.
+  void start(const std::string &kernel_name); //!< Start the message processing threads on the host.
+  void stop();                                //!< \brief Stop message processing on the host.
+                                              //!<
+                                              //!< It is the responsibility
+                                              //!< of calling code to make sure kernels have finished by e.g. issuing
+                                              //!< a hipDeviceSyncronize() or other synchronization call.
   void append_handler(std::unique_ptr<message_handler_base> &&message_handler);
   //!< \brief Append a message handler to the end of the handler chain.
   //!<
@@ -137,6 +138,8 @@ private:
   std::size_t bytes_processed_;
   std::string kernel_name_;
   kernelDB::kernelDB *kdb_;
+  std::size_t dh_comms_id_;
+  static std::atomic<std::size_t> dh_comms_id_counter_;
 };
 
 } // namespace dh_comms

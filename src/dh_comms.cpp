@@ -34,6 +34,8 @@
 
 namespace dh_comms {
 
+std::atomic<std::size_t> dh_comms::dh_comms_id_counter_{0};
+
 dh_comms_mem_mgr::dh_comms_mem_mgr() { return; }
 
 dh_comms_mem_mgr::~dh_comms_mem_mgr() {}
@@ -128,7 +130,9 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       message_handler_chain_(handlers_pass_through),
       sub_buffer_processor_(),
       start_time_(),
-      stop_time_() {
+      stop_time_(),
+      dh_comms_id_(dh_comms_id_counter_.fetch_add(1, std::memory_order_relaxed)) {
+  std::cerr << "dh_comms object " << dh_comms_id_ << " ctor" << std::endl;
   kdb_ = nullptr;
   if (install_default_handlers) {
     install_default_message_handlers();
@@ -145,15 +149,18 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
 }
 
 dh_comms::~dh_comms() {
+  std::cerr << "dh_comms object " << dh_comms_id_ << " dtor START" << std::endl;
   if (running_) {
     // if processing threads are still running, stop/join them, to avoid the program
     // to hang.
     stop();
   }
   if (*rsrc_.desc_.error_bits_ & 1) {
-    printf("Error detected: data from device dropped because message size was larger than sub-buffer size\n");
+    std::cerr << "Error detected: data from device dropped because message size was larger than sub-buffer size"
+              << std::endl;
   }
   mgr_->free_device_memory(dev_rsrc_p_);
+  std::cerr << "dh_comms object " << dh_comms_id_ << " dtor END" << std::endl;
 }
 
 dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr() { return dev_rsrc_p_; }
@@ -188,14 +195,15 @@ void dh_comms::delete_handlers() {
   message_handler_chain_.clear();
 }
 
-
 void dh_comms::report(bool auto_clear_states) {
-  assert(not running_);
+  std::cerr << "dh_comms object " << dh_comms_id_ << " report() START - about to call handler chain report"
+            << std::endl;
   if (kdb_)
     message_handler_chain_.report(kernel_name_, *kdb_);
   else
     message_handler_chain_.report();
 
+  std::cerr << "dh_comms object " << dh_comms_id_ << " report() - handler chain report returned" << std::endl;
   const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
   double MiBps = bytes_processed_ / processing_time.count() / 1.0e6;
   printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed_, processing_time.count(), MiBps);
@@ -203,6 +211,7 @@ void dh_comms::report(bool auto_clear_states) {
   if (auto_clear_states) {
     clear_handler_states();
   }
+  std::cerr << "dh_comms object " << dh_comms_id_ << " report() END" << std::endl;
 }
 
 void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_handler) {
@@ -213,7 +222,7 @@ void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_ha
 
 void dh_comms::install_default_message_handlers() {
   assert(not running_);
-  //append_handler(std::make_unique<memory_heatmap_t>());
+  // append_handler(std::make_unique<memory_heatmap_t>());
 }
 
 void dh_comms::processing_loop(bool is_final_loop) {
