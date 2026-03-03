@@ -28,11 +28,23 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <thread>
 #include <vector>
 
 namespace dh_comms {
+
+//! \brief Filter configuration for a single dimension (X, Y, or Z).
+//!
+//! Used to filter messages based on block_idx values. When enabled, only messages
+//! with block_idx in the range [min, max) pass the filter.
+struct block_idx_filter_t {
+  bool enabled = false;   //!< Whether filtering is enabled for this dimension
+  uint16_t min = 0;       //!< Minimum block_idx value (inclusive)
+  uint16_t max = 0;       //!< Maximum block_idx value (exclusive)
+};
+
 class dh_comms_mem_mgr {
 public:
   dh_comms_mem_mgr();
@@ -124,6 +136,17 @@ private:
   void processing_loop(bool is_final_loop);
   void install_default_message_handlers();
 
+  //! \brief Parse a filter range from an environment variable value.
+  //!
+  //! Accepts formats: "N" (single value, range [N, N+1)) or "N:M" (range [N, M)).
+  //! Returns a filter with enabled=false if the value is empty or invalid.
+  static block_idx_filter_t parse_filter_env(const char *env_value);
+
+  //! \brief Check if a message passes all configured block_idx filters.
+  //!
+  //! Returns true if the message should be processed, false if it should be skipped.
+  bool message_passes_filter(const wave_header_t &header) const;
+
 private:
   dh_comms_mem_mgr default_mgr_;
   dh_comms_mem_mgr *mgr_;
@@ -140,6 +163,12 @@ private:
   kernelDB::kernelDB *kdb_;
   std::size_t dh_comms_id_;
   static std::atomic<std::size_t> dh_comms_id_counter_;
+
+  // Block index filters - parsed from DH_COMMS_GROUP_FILTER_{X,Y,Z} env vars
+  block_idx_filter_t filter_x_;
+  block_idx_filter_t filter_y_;
+  block_idx_filter_t filter_z_;
+  bool any_filter_enabled_;  //!< Fast-path check: true if any filter is enabled
 };
 
 } // namespace dh_comms

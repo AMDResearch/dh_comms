@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <hip/hip_runtime.h>
 #include <string>
 #include <vector>
@@ -114,6 +115,78 @@ dh_comms_resources::~dh_comms_resources() {
   mgr_.free_device_memory(desc_.buffer_);
 }
 
+bool dh_comms::message_passes_filter(const wave_header_t &header) const {
+  // Fast path: no filters enabled
+  if (!any_filter_enabled_) {
+    return true;
+  }
+
+  // Check each enabled filter
+  if (filter_x_.enabled) {
+    if (header.block_idx_x < filter_x_.min || header.block_idx_x >= filter_x_.max) {
+      return false;
+    }
+  }
+  if (filter_y_.enabled) {
+    if (header.block_idx_y < filter_y_.min || header.block_idx_y >= filter_y_.max) {
+      return false;
+    }
+  }
+  if (filter_z_.enabled) {
+    if (header.block_idx_z < filter_z_.min || header.block_idx_z >= filter_z_.max) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+block_idx_filter_t dh_comms::parse_filter_env(const char *env_value) {
+  block_idx_filter_t filter;
+  if (env_value == nullptr || env_value[0] == '\0') {
+    return filter;  // Not set, filtering disabled
+  }
+
+  std::string value(env_value);
+  try {
+    size_t colon_pos = value.find(':');
+    if (colon_pos != std::string::npos) {
+      // Range format: "N:M"
+      int min_val = std::stoi(value.substr(0, colon_pos));
+      int max_val = std::stoi(value.substr(colon_pos + 1));
+
+      if (min_val < 0 || max_val < 0) {
+        std::cerr << "Warning: Invalid filter range '" << value << "' (negative values). Filter disabled." << std::endl;
+        return filter;
+      }
+      if (min_val > max_val) {
+        std::cerr << "Warning: Invalid filter range '" << value << "' (min > max). Filter disabled." << std::endl;
+        return filter;
+      }
+
+      filter.enabled = true;
+      filter.min = static_cast<uint16_t>(min_val);
+      filter.max = static_cast<uint16_t>(max_val);
+    } else {
+      // Single value format: "N" -> range [N, N+1)
+      int single_val = std::stoi(value);
+      if (single_val < 0) {
+        std::cerr << "Warning: Invalid filter value '" << value << "' (negative). Filter disabled." << std::endl;
+        return filter;
+      }
+
+      filter.enabled = true;
+      filter.min = static_cast<uint16_t>(single_val);
+      filter.max = static_cast<uint16_t>(single_val + 1);
+    }
+  } catch (const std::exception &e) {
+    std::cerr << "Warning: Failed to parse filter value '" << value << "': " << e.what() << ". Filter disabled."
+              << std::endl;
+  }
+
+  return filter;
+}
+
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, kernelDB::kernelDB *kdb, bool verbose,
                    bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through)
     : dh_comms(no_sub_buffers, sub_buffer_capacity, verbose, install_default_handlers, mgr, handlers_pass_through) {
@@ -131,7 +204,11 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       sub_buffer_processor_(),
       start_time_(),
       stop_time_(),
-      dh_comms_id_(dh_comms_id_counter_.fetch_add(1, std::memory_order_relaxed)) {
+      dh_comms_id_(dh_comms_id_counter_.fetch_add(1, std::memory_order_relaxed)),
+      filter_x_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_X"))),
+      filter_y_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Y"))),
+      filter_z_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Z"))),
+      any_filter_enabled_(filter_x_.enabled || filter_y_.enabled || filter_z_.enabled) {
   std::cerr << "dh_comms object " << dh_comms_id_ << " ctor" << std::endl;
   kdb_ = nullptr;
   if (install_default_handlers) {
@@ -145,6 +222,16 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       printf("%s:%d:\n\t Buffers accessed from both host and device are allocated in device memory\n", __FILE__,
              __LINE__);
     }
+  }
+  if (any_filter_enabled_ && verbose_) {
+    std::cerr << "dh_comms: Block index filters active:";
+    if (filter_x_.enabled)
+      std::cerr << " X=[" << filter_x_.min << "," << filter_x_.max << ")";
+    if (filter_y_.enabled)
+      std::cerr << " Y=[" << filter_y_.min << "," << filter_y_.max << ")";
+    if (filter_z_.enabled)
+      std::cerr << " Z=[" << filter_z_.min << "," << filter_z_.max << ")";
+    std::cerr << std::endl;
   }
 }
 
@@ -248,10 +335,13 @@ void dh_comms::processing_loop(bool is_final_loop) {
       char *message_p = &rsrc_.desc_.buffer_[byte_offset];
       while (size != 0 and message_handler_chain_.size() != 0) {
         message_t message(message_p);
-        if (kdb_)
-          message_handler_chain_.handle(message, kernel_name_, *kdb_);
-        else
-          message_handler_chain_.handle(message);
+        // Apply block index filter before invoking handlers
+        if (message_passes_filter(message.wave_header())) {
+          if (kdb_)
+            message_handler_chain_.handle(message, kernel_name_, *kdb_);
+          else
+            message_handler_chain_.handle(message);
+        }
         assert(message.size() <= size);
         size -= message.size();
         message_p += message.size();
