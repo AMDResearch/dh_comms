@@ -209,7 +209,6 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       filter_y_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Y"))),
       filter_z_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Z"))),
       any_filter_enabled_(filter_x_.enabled || filter_y_.enabled || filter_z_.enabled) {
-  std::cerr << "dh_comms object " << dh_comms_id_ << " ctor" << std::endl;
   kdb_ = nullptr;
   if (install_default_handlers) {
     install_default_message_handlers();
@@ -236,7 +235,6 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
 }
 
 dh_comms::~dh_comms() {
-  std::cerr << "dh_comms object " << dh_comms_id_ << " dtor START" << std::endl;
   if (running_) {
     // if processing threads are still running, stop/join them, to avoid the program
     // to hang.
@@ -247,7 +245,6 @@ dh_comms::~dh_comms() {
               << std::endl;
   }
   mgr_->free_device_memory(dev_rsrc_p_);
-  std::cerr << "dh_comms object " << dh_comms_id_ << " dtor END" << std::endl;
 }
 
 dh_comms_descriptor *dh_comms::get_dev_rsrc_ptr() { return dev_rsrc_p_; }
@@ -283,14 +280,11 @@ void dh_comms::delete_handlers() {
 }
 
 void dh_comms::report(bool auto_clear_states) {
-  std::cerr << "dh_comms object " << dh_comms_id_ << " report() START - about to call handler chain report"
-            << std::endl;
   if (kdb_)
     message_handler_chain_.report(kernel_name_, *kdb_);
   else
     message_handler_chain_.report();
 
-  std::cerr << "dh_comms object " << dh_comms_id_ << " report() - handler chain report returned" << std::endl;
   const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
   double MiBps = bytes_processed_ / processing_time.count() / 1.0e6;
   printf("%zu bytes processed in %lf seconds (%.1lf MiB/s)\n", bytes_processed_, processing_time.count(), MiBps);
@@ -298,7 +292,6 @@ void dh_comms::report(bool auto_clear_states) {
   if (auto_clear_states) {
     clear_handler_states();
   }
-  std::cerr << "dh_comms object " << dh_comms_id_ << " report() END" << std::endl;
 }
 
 void dh_comms::append_handler(std::unique_ptr<message_handler_base> &&message_handler) {
