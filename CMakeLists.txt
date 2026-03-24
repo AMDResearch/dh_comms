@@ -45,7 +45,8 @@ file(GLOB_RECURSE DH_COMMS_INCLUDE_FILES "include/*.h")
 set_target_properties(dh_comms PROPERTIES PUBLIC_HEADER "${DH_COMMS_INCLUDE_FILES}")
 include(GNUInstallDirs)
 install(TARGETS dh_comms
-    LIBRARY DESTINATION omniprobe/lib)
+    LIBRARY DESTINATION omniprobe/lib
+    PUBLIC_HEADER DESTINATION omniprobe/include/dh_comms)
 
 message(STATUS "==> {Library,include} install dirs: ${CMAKE_INSTALL_PREFIX}/{${CMAKE_INSTALL_LIBDIR},${CMAKE_INSTALL_INCLUDEDIR}/dh_comms}")
 message(STATUS "==> To change install dirs, rerun cmake with argument \"-DCMAKE_INSTALL_PREFIX=/path/to/install/dir\"")
