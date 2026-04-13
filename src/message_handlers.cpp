@@ -27,6 +27,8 @@
 namespace dh_comms {
 message_handler_base::~message_handler_base() {}
 
+kdb_message_handler_base::~kdb_message_handler_base() {}
+
 message_handler_chain_t::message_handler_chain_t(bool pass_through)
     : pass_through_(pass_through) {}
 
@@ -43,8 +45,15 @@ bool message_handler_chain_t::handle(const message_t &message) {
 
 bool message_handler_chain_t::message_handler_chain_t::handle(const message_t &message, const std::string& kernel_name, kernelDB::kernelDB& kdb) {
   for (auto &mh : message_handlers_) {
-    if (mh->handle(message, kernel_name, kdb) and not pass_through_) {
-      return true;
+    auto *kdb_handler = dynamic_cast<kdb_message_handler_base *>(mh.get());
+    if (kdb_handler) {
+      if (kdb_handler->handle(message, kernel_name, kdb) and not pass_through_) {
+        return true;
+      }
+    } else {
+      if (mh->handle(message) and not pass_through_) {
+        return true;
+      }
     }
   }
   return false;
@@ -69,7 +78,12 @@ void message_handler_chain_t::report(const std::string& kernel_name, kernelDB::k
         kdb.getKernelLines(kernel_name, lines);
     }
     for (auto &mh : message_handlers_) {
-        mh->report(kernel_name, kdb);
+        auto *kdb_handler = dynamic_cast<kdb_message_handler_base *>(mh.get());
+        if (kdb_handler) {
+            kdb_handler->report(kernel_name, kdb);
+        } else {
+            mh->report();
+        }
     }
 }
 

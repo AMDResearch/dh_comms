@@ -29,7 +29,7 @@
 #include <vector>
 
 namespace dh_comms {
-//! \brief base class for message handlers on the host.
+//! \brief Base class for message handlers on the host. KernelDB-free.
 //!
 //! dh_comms maintains a chain of message handlers. These message handlers get to look at
 //! the message, and determine whether they can handle it by inspecting the wave header,
@@ -47,18 +47,31 @@ public:
   //! A derived class implementing handle() must handle a message if it can and return
   //! true, or, if it cannot handle the message, return false.
   virtual bool handle(const message_t &message) = 0;
-  virtual bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb) = 0;
   //! Stateful message handlers that aggregate data during message processing may want to report
   //! the data when done. They may do so by overriding this function. Not all message handlers
   //! may need to report data in the end, e.g., stateless message handlers that just save messages to disk
   //! on the fly as they are processed. These handlers do not need override this function, but just
   //! rely on the implementation of this function by the base class, which does nothing.
   virtual void report() {}
-  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) = 0;
   //! Stateful message handlers must implement the clear function by clearing their state,
   //! so that they can be reused for a new data processing run. Stateless message handlers
   //! don't need to override this function, but can inherit the base class implementation.
   virtual void clear() {};
+};
+
+//! \brief Extended base class for message handlers that need access to KernelDB.
+//!
+//! Adds handle() and report() overloads that accept a kernel name and KernelDB reference.
+//! Omniprobe's message handlers derive from this class.
+class kdb_message_handler_base : public message_handler_base {
+public:
+  kdb_message_handler_base() {};
+  kdb_message_handler_base(const kdb_message_handler_base &) = default;
+  virtual ~kdb_message_handler_base() = 0;
+  using message_handler_base::handle;
+  virtual bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb) = 0;
+  using message_handler_base::report;
+  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) = 0;
 };
 
 class message_handler_chain_t {
