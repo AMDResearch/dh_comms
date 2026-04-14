@@ -17,7 +17,7 @@ set(DH_COMMS_SOURCES
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
 include(env)
 
-link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/kernelDB/lib)
+link_directories(${CMAKE_INSTALL_PREFIX}/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
@@ -30,12 +30,6 @@ target_include_directories (
     ${ROOT_DIR}
     ${HSA_RUNTIME_INC_PATH}
     ${HSA_KMT_LIB_PATH}/..
-    ${KERNELDB_INCLUDE_DIR}
-)
-target_link_libraries(
-    dh_comms
-PRIVATE
-    kernelDB64
 )
 
 target_link_options(dh_comms PRIVATE -fgpu-rdc)

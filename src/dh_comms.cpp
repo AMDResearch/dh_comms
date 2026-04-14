@@ -27,9 +27,12 @@
 #include "message.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <hip/hip_runtime.h>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -187,12 +190,6 @@ block_idx_filter_t dh_comms::parse_filter_env(const char *env_value) {
   return filter;
 }
 
-dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, kernelDB::kernelDB *kdb, bool verbose,
-                   bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through)
-    : dh_comms(no_sub_buffers, sub_buffer_capacity, verbose, install_default_handlers, mgr, handlers_pass_through) {
-  kdb_ = kdb;
-}
-
 dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, bool verbose,
                    bool install_default_handlers, dh_comms_mem_mgr *mgr, bool handlers_pass_through)
     : mgr_(mgr ? mgr : &default_mgr_),
@@ -209,7 +206,6 @@ dh_comms::dh_comms(std::size_t no_sub_buffers, std::size_t sub_buffer_capacity, 
       filter_y_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Y"))),
       filter_z_(parse_filter_env(std::getenv("DH_COMMS_GROUP_FILTER_Z"))),
       any_filter_enabled_(filter_x_.enabled || filter_y_.enabled || filter_z_.enabled) {
-  kdb_ = nullptr;
   if (install_default_handlers) {
     install_default_message_handlers();
   }
@@ -258,7 +254,7 @@ void dh_comms::start() {
 }
 
 void dh_comms::start(const std::string &kernel_name) {
-  kernel_name_ = kernel_name;
+  (void)kernel_name;
   start();
 }
 
@@ -280,10 +276,7 @@ void dh_comms::delete_handlers() {
 }
 
 void dh_comms::report(bool auto_clear_states) {
-  if (kdb_)
-    message_handler_chain_.report(kernel_name_, *kdb_);
-  else
-    message_handler_chain_.report();
+  message_handler_chain_.report();
 
   const std::chrono::duration<double> processing_time = stop_time_ - start_time_;
   double MiBps = bytes_processed_ / processing_time.count() / 1.0e6;
@@ -330,10 +323,7 @@ void dh_comms::processing_loop(bool is_final_loop) {
         message_t message(message_p);
         // Apply block index filter before invoking handlers
         if (message_passes_filter(message.wave_header())) {
-          if (kdb_)
-            message_handler_chain_.handle(message, kernel_name_, *kdb_);
-          else
-            message_handler_chain_.handle(message);
+          message_handler_chain_.handle(message);
         }
         assert(message.size() <= size);
         size -= message.size();

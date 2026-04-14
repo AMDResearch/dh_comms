@@ -22,7 +22,6 @@
 
 #pragma once
 #include "data_headers.h"
-#include "kernelDB.h"
 #include "message_handlers.h"
 
 #include <atomic>
@@ -96,11 +95,6 @@ class dh_comms {
 public:
   dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
            std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
-           kernelDB::kernelDB *kdb,
-           bool verbose = false, //!< Controls how chatty the code is.
-           bool install_default_handlers = false, dh_comms_mem_mgr *mgr = NULL, bool handlers_pass_through = true);
-  dh_comms(std::size_t no_sub_buffers,      //!< Number of sub-buffers into which the main data buffer is partitioned.
-           std::size_t sub_buffer_capacity, //!< The maximum number of bytes each of the sub-buffers can hold.
            bool verbose = false,            //!< Controls how chatty the code is.
            bool install_default_handlers = false, dh_comms_mem_mgr *mgr = NULL, bool handlers_pass_through = true);
   ~dh_comms();
@@ -159,8 +153,6 @@ private:
   std::chrono::time_point<std::chrono::steady_clock> start_time_;
   std::chrono::time_point<std::chrono::steady_clock> stop_time_;
   std::size_t bytes_processed_;
-  std::string kernel_name_;
-  kernelDB::kernelDB *kdb_;
   std::size_t dh_comms_id_;
   static std::atomic<std::size_t> dh_comms_id_counter_;
 

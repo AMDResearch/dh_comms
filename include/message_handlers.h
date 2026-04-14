@@ -23,7 +23,6 @@
 #pragma once
 
 #include "message.h"
-#include "kernelDB.h"
 
 #include <memory>
 #include <vector>
@@ -59,21 +58,6 @@ public:
   virtual void clear() {};
 };
 
-//! \brief Extended base class for message handlers that need access to KernelDB.
-//!
-//! Adds handle() and report() overloads that accept a kernel name and KernelDB reference.
-//! Omniprobe's message handlers derive from this class.
-class kdb_message_handler_base : public message_handler_base {
-public:
-  kdb_message_handler_base() {};
-  kdb_message_handler_base(const kdb_message_handler_base &) = default;
-  virtual ~kdb_message_handler_base() = 0;
-  using message_handler_base::handle;
-  virtual bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb) = 0;
-  using message_handler_base::report;
-  virtual void report(const std::string& kernel_name, kernelDB::kernelDB& kdb) = 0;
-};
-
 class message_handler_chain_t {
 public:
   message_handler_chain_t(bool pass_through = false);
@@ -84,10 +68,8 @@ public:
 
   size_t size() const;
   bool handle(const message_t &message);
-  bool handle(const message_t &message, const std::string& kernel, kernelDB::kernelDB& kdb);
   void add_handler(std::unique_ptr<message_handler_base> &&message_handler);
   void report();
-  void report(const std::string& kernel_name, kernelDB::kernelDB& kdb);
   void clear_handler_states(); //!< Keeps the handlers, but clears their states
   void clear();                //!< Removes all handlers from the chain
 
