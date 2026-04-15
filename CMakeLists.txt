@@ -47,6 +47,42 @@ message(STATUS "==> To change install dirs, rerun cmake with argument \"-DCMAKE_
 
 add_subdirectory(doc)
 
+set(DH_COMMS_BITCODE_FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co5.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co6.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co5.bc
+    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co6.bc
+)
+
+set(DH_COMMS_ARCH_BITCODE_COMMANDS)
+foreach(DH_COMMS_ARCH IN LISTS CMAKE_HIP_ARCHITECTURES)
+    string(REGEX REPLACE ":.*$" "" DH_COMMS_ARCH_BASE "${DH_COMMS_ARCH}")
+    list(APPEND DH_COMMS_BITCODE_FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co5.bc
+        ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co6.bc
+    )
+    list(APPEND DH_COMMS_ARCH_BITCODE_COMMANDS
+        COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header -mcode-object-version=5
+            -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+            $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
+            $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
+            --offload-arch=${DH_COMMS_ARCH} --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+            -o lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co5.ll
+        COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co5.ll
+        COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co5.ll -o lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co5.bc
+        COMMAND ${CMAKE_HIP_COMPILER} -Wno-pragma-once-outside-header
+            -O3 -I${ROCM_ROOT_DIR}/include -I${HSA_RUNTIME_INC_PATH}
+            $<$<BOOL:${KERNELDB_INCLUDE_DIR}>:-I${KERNELDB_INCLUDE_DIR}>
+            $<$<BOOL:${LIBDWARF_INCLUDE_DIR}>:-I${LIBDWARF_INCLUDE_DIR}> -x hip
+            --offload-arch=${DH_COMMS_ARCH} --cuda-device-only -emit-llvm -S ${CMAKE_CURRENT_SOURCE_DIR}/include/dh_comms_dev.h
+            -o lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co6.ll
+        COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co6.ll
+        COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co6.ll -o lib/dh_comms_dev_${DH_COMMS_ARCH_BASE}_co6.bc
+    )
+endforeach()
+
+list(REMOVE_DUPLICATES DH_COMMS_BITCODE_FILES)
+
 add_custom_command(
     OUTPUT dh_comms_bc.stamp
     COMMAND mkdir -p lib
@@ -86,6 +122,7 @@ add_custom_command(
         -o lib/dh_comms_dev_cdna3_co6.ll
     COMMAND sed -i 's/\"target-cpu\"=\"[^\"]*\" //g' lib/dh_comms_dev_cdna3_co6.ll
     COMMAND ${ROCM_ROOT_DIR}/llvm/bin/llvm-as lib/dh_comms_dev_cdna3_co6.ll -o lib/dh_comms_dev_cdna3_co6.bc
+    ${DH_COMMS_ARCH_BITCODE_COMMANDS}
     COMMAND touch dh_comms_bc.stamp
     DEPENDS include/dh_comms_dev.h
 )
@@ -96,10 +133,6 @@ add_custom_target(dh_comms_bc ALL
 
 set_property(TARGET dh_comms_bc APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${DH_COMMS_BITCODE_FILES})
 
-install(PROGRAMS
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co5.bc
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna2_co6.bc
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co5.bc
-    ${CMAKE_CURRENT_BINARY_DIR}/lib/dh_comms_dev_cdna3_co6.bc
+install(PROGRAMS ${DH_COMMS_BITCODE_FILES}
     DESTINATION omniprobe/lib/bitcode
 )
