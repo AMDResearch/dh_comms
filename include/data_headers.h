@@ -21,9 +21,35 @@
 // SOFTWARE.
 
 #pragma once
+#include <cstdint>
 #include <vector>
 
 namespace dh_comms {
+
+struct builtin_snapshot_t {
+  uint32_t grid_dim_x = 0;
+  uint32_t grid_dim_y = 0;
+  uint32_t grid_dim_z = 0;
+  uint32_t block_idx_x = 0;
+  uint32_t block_idx_y = 0;
+  uint32_t block_idx_z = 0;
+  uint32_t block_dim_x = 0;
+  uint32_t block_dim_y = 0;
+  uint32_t block_dim_z = 0;
+  uint32_t thread_idx_x = 0;
+  uint32_t thread_idx_y = 0;
+  uint32_t thread_idx_z = 0;
+  uint32_t lane_id = 0;
+  uint32_t wave_num = 0;
+  uint32_t wavefront_size = 0;
+  uint32_t hw_id = 0;
+  uint16_t xcc_id = 0;
+  uint16_t se_id = 0;
+  uint16_t cu_id = 0;
+  uint16_t arch = 0;
+  uint64_t exec = 0;
+};
+
 //! \brief Messages start with a wave header containing information that partains to the whole wave.
 //!
 //! User device code does not use wave headers directly, but user host code may.
@@ -88,7 +114,8 @@ struct wave_header_t {
   //! constructor argument are detected and assigned by the constructor.
   __device__ wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message, bool has_lane_headers,
                            uint64_t timestamp, uint32_t active_lane_count, uint64_t dwarf_fname_hash,
-                           uint32_t dwarf_line, uint32_t dwarf_column, uint32_t user_type, uint32_t user_data);
+                           uint32_t dwarf_line, uint32_t dwarf_column, uint32_t user_type, uint32_t user_data,
+                           const builtin_snapshot_t *builtins = nullptr);
 
   //! Wave header constructor; creates a wave header from raw bytes
   wave_header_t(const char *wave_header_p);
@@ -107,7 +134,7 @@ struct lane_header_t {
   uint32_t unused : 2;
 
   //! The lane header default device constructor fills the thread_idx_[x,y,z] fields.
-  __device__ lane_header_t();
+  __device__ explicit lane_header_t(const builtin_snapshot_t *builtins = nullptr);
 
   //! Lane header constructor; creates a lane header from raw bytes
   lane_header_t(const char *lane_header_p);

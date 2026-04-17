@@ -33,7 +33,8 @@ namespace dh_comms {
 //! @cond
 
 // Returns the index of the sub-buffer to which the calling wave should write.
-__device__ inline size_t get_sub_buffer_idx(size_t no_sub_buffers) {
+__device__ inline size_t get_sub_buffer_idx(size_t no_sub_buffers,
+                                                const builtin_snapshot_t *builtins = nullptr) {
   // To balance the number of waves writing to the sub-buffers, this function
   // calculates the flattened workgroup/block index, and takes that value
   // modulo the number of sub-buffers.
@@ -49,14 +50,20 @@ __device__ inline size_t get_sub_buffer_idx(size_t no_sub_buffers) {
   // which means that we can apply the modulo operation on intermediate results,
   // and get the same final result without risking overflow.
 
-  size_t grid_dim_x_m = gridDim.x % no_sub_buffers;
-  size_t grid_dim_y_m = gridDim.y % no_sub_buffers;
+  const size_t grid_dim_x = builtins ? builtins->grid_dim_x : gridDim.x;
+  const size_t grid_dim_y = builtins ? builtins->grid_dim_y : gridDim.y;
+  const size_t block_idx_x = builtins ? builtins->block_idx_x : blockIdx.x;
+  const size_t block_idx_y = builtins ? builtins->block_idx_y : blockIdx.y;
+  const size_t block_idx_z = builtins ? builtins->block_idx_z : blockIdx.z;
+
+  size_t grid_dim_x_m = grid_dim_x % no_sub_buffers;
+  size_t grid_dim_y_m = grid_dim_y % no_sub_buffers;
   size_t grid_dim_xy_m = (grid_dim_x_m * grid_dim_y_m) % no_sub_buffers;
-  size_t block_id_z_grid_dim_xy_m = (blockIdx.z * grid_dim_xy_m) % no_sub_buffers;
+  size_t block_id_z_grid_dim_xy_m = (block_idx_z * grid_dim_xy_m) % no_sub_buffers;
 
-  size_t block_id_y_grid_dim_x_m = (blockIdx.y * grid_dim_x_m) % no_sub_buffers;
+  size_t block_id_y_grid_dim_x_m = (block_idx_y * grid_dim_x_m) % no_sub_buffers;
 
-  size_t block_id_x_m = blockIdx.x % no_sub_buffers;
+  size_t block_id_x_m = block_idx_x % no_sub_buffers;
 
   return (block_id_z_grid_dim_xy_m + block_id_y_grid_dim_x_m + block_id_x_m) % no_sub_buffers;
 }
@@ -126,7 +133,8 @@ __device__ inline void generic_submit_message(
     uint32_t user_data,        // Auxiliary data field; it's use depends on the message type.
     bool is_vector_message,    // true if all active lanes are to submit a message, false for scalar submit, where only
                                // the first active lane is to submit
-    bool submit_lane_headers)  // true if lane headers (with thread coordinates for the lane) are to be included after
+    bool submit_lane_headers,
+    const builtin_snapshot_t *builtins = nullptr)  // true if lane headers (with thread coordinates for the lane) are to be included after
                                // the wave header
 {
   uint64_t timestamp = __clock64(); // Get the timestamp first so that it is minimally perturbed by the direct and
@@ -136,7 +144,7 @@ __device__ inline void generic_submit_message(
                           // a lane that is active, i.e., not masked out in the execution mask.
                           // Also: all active lanes write data, and they use the active lane id to determine
                           // the offset in the buffer for writing the lane data.
-  size_t sub_buf_idx = get_sub_buffer_idx(rsrc->no_sub_buffers_); // Index of the sub-buffer the wave is going to use
+  size_t sub_buf_idx = get_sub_buffer_idx(rsrc->no_sub_buffers_, builtins); // Index of the sub-buffer the wave is going to use
   uint64_t exec =
       __builtin_amdgcn_read_exec(); // Execution mask is passed in the wave header; can be used for analysis purposes.
   unsigned int active_lane_count = __active_lane_count(
@@ -177,7 +185,7 @@ __device__ inline void generic_submit_message(
   // First write the wave header; only one wave takes care of that
   if (active_lane_id == 0) {
     wave_header_t wave_header(exec, data_size, is_vector_message, submit_lane_headers, timestamp, active_lane_count,
-                              dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
+                              dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data, builtins);
     size_t byte_offset = sub_buf_idx * sub_buffer_capacity + current_size;
     wave_header_t *wave_header_p = (wave_header_t *)(&buffer[byte_offset]);
     *wave_header_p = wave_header;
@@ -189,7 +197,7 @@ __device__ inline void generic_submit_message(
   if (submit_lane_headers) {
     byte_offset += active_lane_id * sizeof(lane_header_t);
     lane_header_t *lane_header_p = (lane_header_t *)(&buffer[byte_offset]);
-    lane_header_t lane_header; // constructor fills in thread coordinates into lane header
+    lane_header_t lane_header(builtins); // constructor fills in thread coordinates into lane header
     *lane_header_p = lane_header;
   }
 
@@ -265,12 +273,13 @@ __attribute__((used)) extern "C" __device__ inline void v_submit_message(
         0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
                                      //!< code that processes the messages.
-    uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
+    uint32_t user_data = 0xffffffff,
+    const builtin_snapshot_t *builtins = nullptr) //!< Auxiliary data; use depends on user_type.
 {
   bool is_vector_message = true;
   bool submit_lane_headers = true;
   generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
-                         is_vector_message, submit_lane_headers);
+                         is_vector_message, submit_lane_headers, builtins);
 }
 
 //! \brief Submit a scalar message of any type that is valid in device code from the device to the host.
@@ -291,11 +300,12 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_message(
         0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
                                      //!< code that processes the messages.
-    uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
+    uint32_t user_data = 0xffffffff,
+    const builtin_snapshot_t *builtins = nullptr) //!< Auxiliary data; use depends on user_type.
 {
   bool is_vector_message = false;
   generic_submit_message(rsrc, message, message_size, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
-                         is_vector_message, submit_lane_headers);
+                         is_vector_message, submit_lane_headers, builtins);
 }
 
 //! \brief Submit a a single wave header; no lane headers, no message data.
@@ -310,24 +320,29 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_wave_header(
         0xffffffff,                  //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint32_t user_type = 0xffffffff, //!< Tag to distinguish between different kinds of messages, used by host
                                      //!< code that processes the messages.
-    uint32_t user_data = 0xffffffff) //!< Auxiliary data; use depends on user_type.
+    uint32_t user_data = 0xffffffff,
+    const builtin_snapshot_t *builtins = nullptr) //!< Auxiliary data; use depends on user_type.
 {
-  s_submit_message(rsrc, nullptr, 0, false, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
+  s_submit_message(rsrc, nullptr, 0, false, dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
+                   builtins);
 }
 
-__attribute__((used)) extern "C" __device__ inline void v_submit_address(
+__attribute__((used)) extern "C" __device__ __attribute__((always_inline)) inline void v_submit_address(
     dh_comms_descriptor *rsrc, void *address,
     uint64_t dwarf_fname_hash, //!< Hash of the source file from which v_submit_message() is called.
     uint32_t dwarf_line,       //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column,     //!< Column of the instrumented instruction for which v_submit_message() is called.
     uint8_t rw_kind,           // use 2 bits: 0b01 = read, 0b10 = write, 0b11 = modify (e.g., atomic add)
     uint8_t memory_space,      // use 4 bits (don't need that many on current hardware)
-    uint16_t sizeof_pointee) { // use 16 bits (unlikely large for GPU code)
+    uint16_t sizeof_pointee,
+    const builtin_snapshot_t *builtins = nullptr) { // use 16 bits (unlikely large for GPU code)
+  uintptr_t payload = reinterpret_cast<uintptr_t>(address);
   uint32_t user_type = message_type::address;
   uint32_t user_data = rw_kind & 0b11;
   user_data |= ((memory_space & 0xf) << 2);
   user_data |= (sizeof_pointee << 6);
-  v_submit_message(rsrc, &address, sizeof(void *), dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data);
+  v_submit_message(rsrc, &payload, sizeof(payload), dwarf_fname_hash, dwarf_line, dwarf_column, user_type, user_data,
+                   builtins);
 }
 
 __attribute__((used)) extern "C" __device__ inline void s_submit_time_interval(
@@ -336,10 +351,11 @@ __attribute__((used)) extern "C" __device__ inline void s_submit_time_interval(
     uint32_t dwarf_line =
         0xffffffff, //!< Line number of the instrumented instruction for which v_submit_message() is called.
     uint32_t dwarf_column = 0xffffffff, //!
-    uint32_t user_data = 0xffffffff)    //!< Auxiliary data; use depends on user_type.
+    uint32_t user_data = 0xffffffff,
+    const builtin_snapshot_t *builtins = nullptr)    //!< Auxiliary data; use depends on user_type.
 {
   s_submit_message(rsrc, time_interval, 2 * sizeof(uint64_t), /* submit_lane_headers */ false, dwarf_fname_hash,
-                   dwarf_line, dwarf_column, /* user_type */ 1, user_data);
+                   dwarf_line, dwarf_column, /* user_type */ 1, user_data, builtins);
 }
 
 __attribute__((used)) extern "C" __device__ inline uint64_t s_clock64() { return __clock64(); }

@@ -27,10 +27,70 @@
 #include "message.h"
 
 namespace dh_comms {
+__device__ inline uint8_t detect_gcn_arch() {
+#if defined(__gfx906__)
+#pragma message("Building device code for gfx906")
+  return gcnarch::gfx906;
+#elif defined(__gfx908__)
+#pragma message("Building device code for gfx908")
+  return gcnarch::gfx908;
+#elif defined(__gfx90a__)
+#pragma message("Building device code for gfx90a")
+  return gcnarch::gfx90a;
+#elif defined(__gfx940__)
+#pragma message("Building device code for gfx940")
+  return gcnarch::gfx940;
+#elif defined(__gfx941__)
+#pragma message("Building device code for gfx941")
+  return gcnarch::gfx941;
+#elif defined(__gfx942__)
+#pragma message("Building device code for gfx942")
+  return gcnarch::gfx942;
+#elif !defined(__host__)
+#error Unsupported GPU architecture, update data_headers_dev.h
+#else
+  return gcnarch::unsupported;
+#endif
+}
+
+__device__ inline builtin_snapshot_t capture_builtin_snapshot() {
+  builtin_snapshot_t snapshot{};
+  snapshot.grid_dim_x = gridDim.x;
+  snapshot.grid_dim_y = gridDim.y;
+  snapshot.grid_dim_z = gridDim.z;
+  snapshot.block_idx_x = blockIdx.x;
+  snapshot.block_idx_y = blockIdx.y;
+  snapshot.block_idx_z = blockIdx.z;
+  snapshot.block_dim_x = blockDim.x;
+  snapshot.block_dim_y = blockDim.y;
+  snapshot.block_dim_z = blockDim.z;
+  snapshot.thread_idx_x = threadIdx.x;
+  snapshot.thread_idx_y = threadIdx.y;
+  snapshot.thread_idx_z = threadIdx.z;
+  snapshot.lane_id = __lane_id();
+  snapshot.wave_num = __wave_num();
+  snapshot.wavefront_size = warpSize;
+  snapshot.exec = __builtin_amdgcn_read_exec();
+  snapshot.xcc_id = 0;
+#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
+  uint32_t xcc_reg;
+  asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
+  snapshot.xcc_id = (xcc_reg & 0xf);
+#endif
+  uint32_t cu_se_reg;
+  asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
+  snapshot.hw_id = cu_se_reg;
+  snapshot.se_id = ((cu_se_reg >> 13) & 0x7);
+  snapshot.cu_id = (cu_se_reg >> 8) & 0xf;
+  snapshot.arch = detect_gcn_arch();
+  return snapshot;
+}
+
 __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size, bool is_vector_message,
                                                bool has_lane_headers, uint64_t timestamp, uint32_t active_lane_count,
                                                uint64_t dwarf_fname_hash, uint32_t dwarf_line, uint32_t dwarf_column,
-                                               uint32_t user_type, uint32_t user_data)
+                                               uint32_t user_type, uint32_t user_data,
+                                               const builtin_snapshot_t *builtins)
     : exec(exec),
       data_size(data_size),
       is_vector_message(is_vector_message),
@@ -41,12 +101,19 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
       dwarf_column(dwarf_column),
       user_type(user_type),
       user_data(user_data),
-      block_idx_x(blockIdx.x),
-      block_idx_y(blockIdx.y),
-      block_idx_z(blockIdx.z),
-      wave_num(__wave_num()),
+      block_idx_x(builtins ? builtins->block_idx_x : blockIdx.x),
+      block_idx_y(builtins ? builtins->block_idx_y : blockIdx.y),
+      block_idx_z(builtins ? builtins->block_idx_z : blockIdx.z),
+      wave_num(builtins ? builtins->wave_num : __wave_num()),
       active_lane_count(active_lane_count),
-      arch(gcnarch::unsupported) { // We'll check if the arch is supported in the constructor body.
+      arch(builtins ? static_cast<uint8_t>(builtins->arch) : gcnarch::unsupported) {
+  if (builtins) {
+    xcc_id = builtins->xcc_id;
+    se_id = builtins->se_id;
+    cu_id = builtins->cu_id;
+    return;
+  }
+
   // for pre-MI300 hardware that isn't partitioned into XCCx, we set the xcc_id to zero. For
   // the MI300 variants (gfx94[012], we query the hardware registers to find out where on the
   // device we are running. Documentation of the hardware registers can be found in Section
@@ -64,34 +131,13 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
   asm volatile("s_getreg_b32 %0, hwreg(HW_REG_HW_ID)" : "=s"(cu_se_reg));
   se_id = ((cu_se_reg >> 13) & 0x7);
   cu_id = (cu_se_reg >> 8) & 0xf;
-
-#if defined(__gfx906__)
-#pragma message("Building device code for gfx906")
-  arch = gcnarch::gfx906;
-#elif defined(__gfx908__)
-#pragma message("Building device code for gfx908")
-  arch = gcnarch::gfx908;
-#elif defined(__gfx90a__)
-#pragma message("Building device code for gfx90a")
-  arch = gcnarch::gfx90a;
-#elif defined(__gfx940__)
-#pragma message("Building device code for gfx940")
-  arch = gcnarch::gfx940;
-#elif defined(__gfx941__)
-#pragma message("Building device code for gfx941")
-  arch = gcnarch::gfx941;
-#elif defined(__gfx942__)
-#pragma message("Building device code for gfx942")
-  arch = gcnarch::gfx942;
-#elif !defined(__host__)
-#error Unsupported GPU architecture, update data_headers_dev.h
-#endif
+  arch = detect_gcn_arch();
 }
 
-__device__ inline lane_header_t::lane_header_t() {
-  thread_idx_x = threadIdx.x;
-  thread_idx_y = threadIdx.y;
-  thread_idx_z = threadIdx.z;
+__device__ inline lane_header_t::lane_header_t(const builtin_snapshot_t *builtins) {
+  thread_idx_x = builtins ? builtins->thread_idx_x : threadIdx.x;
+  thread_idx_y = builtins ? builtins->thread_idx_y : threadIdx.y;
+  thread_idx_z = builtins ? builtins->thread_idx_z : threadIdx.z;
 }
 
 } // namespace dh_comms
