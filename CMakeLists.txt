@@ -12,6 +12,7 @@ set(DH_COMMS_SOURCES
     src/data_headers.cpp
     src/message.cpp
     src/message_handlers.cpp
+    src/hip_runtime_loader.cpp
 )
 
 list(INSERT CMAKE_MODULE_PATH 0 "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules")
@@ -19,6 +20,8 @@ include(env)
 
 link_directories(${CMAKE_INSTALL_PREFIX}/lib)
 set_source_files_properties(${DH_COMMS_SOURCES} PROPERTIES LANGUAGE HIP)
+# hip_runtime_loader is pure host C++ (dlsym/dlopen), not device code
+set_source_files_properties(src/hip_runtime_loader.cpp PROPERTIES LANGUAGE CXX)
 add_library(dh_comms SHARED ${DH_COMMS_SOURCES})
 target_compile_options(dh_comms PRIVATE -fgpu-rdc -Werror -Wall -Wextra)
 
@@ -32,7 +35,8 @@ target_include_directories (
     ${HSA_KMT_LIB_PATH}/..
 )
 
-target_link_options(dh_comms PRIVATE -fgpu-rdc)
+target_link_options(dh_comms PRIVATE -fgpu-rdc -Wl,--as-needed)
+target_link_libraries(dh_comms PRIVATE dl)
 set_target_properties(dh_comms PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/lib)
 
 file(GLOB_RECURSE DH_COMMS_INCLUDE_FILES "include/*.h")

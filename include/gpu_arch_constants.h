@@ -62,6 +62,20 @@ inline uint8_t arch_string_to_enum(const std::string& arch_str) {
     return 0; // gcnarch::unsupported
 }
 
+// Reverse mapping: convert gcnarch enum value to architecture string
+// Returns "unknown" for unsupported or out-of-range values
+inline const char* arch_enum_to_string(uint8_t arch) {
+    switch (arch) {
+        case 1: return "gfx906";
+        case 2: return "gfx908";
+        case 3: return "gfx90a";
+        case 4: return "gfx940";
+        case 5: return "gfx941";
+        case 6: return "gfx942";
+        default: return "unknown";
+    }
+}
+
 // Device-side L2 cache line size (for use in device code)
 // This is a placeholder for future device-side integration.
 // When device code needs to know its own architecture's cache line size,

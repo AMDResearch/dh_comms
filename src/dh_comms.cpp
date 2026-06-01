@@ -23,7 +23,7 @@
 #include "dh_comms.h"
 
 #include "data_headers.h"
-#include "hip_utils.h"
+#include "hip_runtime_loader.h"
 #include "message.h"
 
 #include <algorithm>
@@ -31,10 +31,28 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <hip/hip_runtime.h>
 #include <iostream>
 #include <string>
 #include <vector>
+
+// HIP enum constants (avoid pulling in hip_runtime.h for host-only code)
+static constexpr unsigned int hipHostMallocCoherent = 0x4;
+static constexpr int hipMemcpyHostToDevice = 1;
+
+namespace {
+using namespace dh_comms::hip_runtime_loader;
+
+inline int checkHipError(hipError_t err, const char *cmd) {
+  if (err) {
+    init(); // ensure pfn_hipGetErrorString is resolved
+    printf("HIP error in command '%s'\n", cmd);
+    printf("Error message: %s\n", pfn_hipGetErrorString(err));
+  }
+  return err;
+}
+} // unnamed namespace
+
+#define CHK_HIP_ERR(cmd) checkHipError(cmd, #cmd)
 
 namespace dh_comms {
 
@@ -45,26 +63,30 @@ dh_comms_mem_mgr::dh_comms_mem_mgr() { return; }
 dh_comms_mem_mgr::~dh_comms_mem_mgr() {}
 
 void *dh_comms_mem_mgr::calloc(std::size_t size) {
+  hip_runtime_loader::init();
   void *buffer;
-  CHK_HIP_ERR(hipHostMalloc(&buffer, size, hipHostMallocCoherent));
+  CHK_HIP_ERR(hip_runtime_loader::pfn_hipHostMalloc(&buffer, size, hipHostMallocCoherent));
   zero((char *)buffer, size);
   return buffer;
 }
 
 void *dh_comms_mem_mgr::calloc_device_memory(std::size_t size) {
+  hip_runtime_loader::init();
   void *result = NULL;
-  CHK_HIP_ERR(hipMalloc(&result, size));
+  CHK_HIP_ERR(hip_runtime_loader::pfn_hipMalloc(&result, size));
   zero_device_memory(result, size);
   return result;
 }
 
 void *dh_comms_mem_mgr::copy_to_device(void *dst, const void *src, std::size_t size) {
-  CHK_HIP_ERR(hipMemcpy(dst, src, size, hipMemcpyHostToDevice));
+  hip_runtime_loader::init();
+  CHK_HIP_ERR(hip_runtime_loader::pfn_hipMemcpy(dst, src, size, hipMemcpyHostToDevice));
   return dst;
 }
 
 void dh_comms_mem_mgr::free(void *ptr) {
-  CHK_HIP_ERR(hipFree(ptr));
+  hip_runtime_loader::init();
+  CHK_HIP_ERR(hip_runtime_loader::pfn_hipFree(ptr));
   return;
 }
 
