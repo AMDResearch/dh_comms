@@ -55,7 +55,7 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
   // Note that a wave may be preempted from the XCC|SE|CU on which it started and resumed on
   // another XCC|SE|CU, so it's not safe to rely on these values.
   xcc_id = 0;
-#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__)
+#if defined(__gfx940__) or defined(__gfx941__) or defined(__gfx942__) or defined(__gfx950__)
   uint32_t xcc_reg;
   asm volatile("s_getreg_b32 %0, hwreg(HW_REG_XCC_ID)" : "=s"(xcc_reg));
   xcc_id = (xcc_reg & 0xf);
@@ -83,6 +83,9 @@ __device__ inline wave_header_t::wave_header_t(uint64_t exec, uint64_t data_size
 #elif defined(__gfx942__)
 #pragma message("Building device code for gfx942")
   arch = gcnarch::gfx942;
+#elif defined(__gfx950__)
+#pragma message("Building device code for gfx950")
+  arch = gcnarch::gfx950;
 #elif !defined(__host__)
 #error Unsupported GPU architecture, update data_headers_dev.h
 #endif

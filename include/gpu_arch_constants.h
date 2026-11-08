@@ -37,7 +37,8 @@ constexpr uint32_t L2_CACHE_LINE_SIZES[] = {
     128, // gfx90a (gcnarch::gfx90a = 3)
     128, // gfx940 (gcnarch::gfx940 = 4)
     128, // gfx941 (gcnarch::gfx941 = 5)
-    128  // gfx942 (gcnarch::gfx942 = 6)
+    128, // gfx942 (gcnarch::gfx942 = 6)
+    128  // gfx950 (gcnarch::gfx950 = 7)
 };
 
 // Helper function to get L2 cache line size with bounds checking
@@ -59,6 +60,7 @@ inline uint8_t arch_string_to_enum(const std::string& arch_str) {
     if (arch_str == "gfx940") return 4; // gcnarch::gfx940
     if (arch_str == "gfx941") return 5; // gcnarch::gfx941
     if (arch_str == "gfx942") return 6; // gcnarch::gfx942
+    if (arch_str == "gfx950") return 7; // gcnarch::gfx950
     return 0; // gcnarch::unsupported
 }
 

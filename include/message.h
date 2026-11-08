@@ -41,7 +41,7 @@ enum : uint8_t { flat = 0, global = 1, gds = 2, shared = 3, constant = 4, scratc
 }
 
 namespace gcnarch {
-enum : uint8_t { unsupported = 0, gfx906 = 1, gfx908 = 2, gfx90a = 3, gfx940 = 4, gfx941 = 5, gfx942 = 6 };
+enum : uint8_t { unsupported = 0, gfx906 = 1, gfx908 = 2, gfx90a = 3, gfx940 = 4, gfx941 = 5, gfx942 = 6, gfx950 = 7 };
 }
 
 class message_t {
