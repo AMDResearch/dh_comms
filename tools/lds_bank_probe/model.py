@@ -54,14 +54,19 @@ GFX950 = {
     "read_b64_tr": (halves(), 64),
     "read_b96_tr": (consecutive(16), 64),
 }
-GFX90A = {  # from the 2026-11-08 model in omniprobe; to be re-measured with this tool
+GFX90A = {  # measured on gfx90a/MI210, 2026-11-09: 32 banks for every class
     "narrow": (halves(), 32),
     "read_b64": (consecutive(16), 32),
-    "read_b96": (None, 32),
+    "read_b96": (CDNA_READ_B128_8, 32),
     "read_b128": (CDNA_READ_B128_8, 32),
     "write_b64": (consecutive(16), 32),
-    "write_b96": (None, 32),
+    "write_b96": (consecutive(8), 32),
     "write_b128": (consecutive(8), 32),
+    "atomic_b32": (halves(), 32),
+    "atomic_b64": (consecutive(16), 32),
+    "atomic_cmpst_b32": (consecutive(16), 16),
+    "atomic_cmpst_b64": (consecutive(8), 16),
+    "atomic_float": ([], 32),
 }
 MODELS = {"gfx950": GFX950, "gfx90a": GFX90A}
 
