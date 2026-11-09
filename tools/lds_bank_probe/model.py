@@ -44,6 +44,12 @@ GFX950 = {
     "write_b128": (consecutive(8), 32),
     "atomic_b32": (halves(), 32),
     "atomic_b64": (consecutive(16), 32),
+    # compare-swap carries two data dwords per lane: 16 lanes a cycle and a
+    # 64-byte period, i.e. behaves as 16 banks
+    "atomic_cmpst_b32": (consecutive(16), 16),
+    # float atomics run lane by lane (3 cycles per active lane in
+    # SQ_LDS_IDX_ACTIVE); SQ_LDS_BANK_CONFLICT stays 0 for any addresses
+    "atomic_float": ([], 32),
     "read_b64_tr": (halves(), 64),
     "read_b96_tr": (consecutive(16), 64),
 }
@@ -61,8 +67,14 @@ MODELS = {"gfx950": GFX950, "gfx90a": GFX90A}
 
 def op_shape(op):
     """(class, bytes per address, list of extra byte offsets per address)."""
-    if op.startswith("add_"):
-        return ("atomic_b64" if "u64" in op else "atomic_b32"), (8 if "u64" in op else 4), [0]
+    if op.startswith(("add_", "max_", "pk_add", "wrxchg", "cmpst")):  # RMW
+        if op.startswith(("add_f32", "pk_add")):
+            return "atomic_float", 4, [0]
+        if op.startswith("cmpst"):
+            return ("atomic_cmpst_b64" if "64" in op else "atomic_cmpst_b32"), (8 if "64" in op else 4), [0]
+        if op.startswith("wrxchg2"):
+            return "atomic_b32", 4, [0, 4 * int(op.rsplit("_", 1)[1])]
+        return ("atomic_b64" if "64" in op else "atomic_b32"), (8 if "64" in op else 4), [0]
     if "_tr_" in op:
         return ("read_b96_tr" if "b96" in op else "read_b64_tr"), (12 if "b96" in op else 8), [0]
     rw = "read" if op.startswith("read") else "write"

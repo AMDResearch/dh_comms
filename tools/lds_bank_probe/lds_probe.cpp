@@ -70,7 +70,11 @@ typedef unsigned v4u __attribute__((ext_vector_type(4)));
   W(add_u32, unsigned, "ds_add_u32 %0, %1")                                           \
   W(add_u64, v2u, "ds_add_u64 %0, %1")                                                \
   A(add_rtn_u32, unsigned, "ds_add_rtn_u32 %0, %1, %2")                               \
-  A(add_rtn_u64, v2u, "ds_add_rtn_u64 %0, %1, %2")
+  A(add_rtn_u64, v2u, "ds_add_rtn_u64 %0, %1, %2")                                   \
+  W(max_u32, unsigned, "ds_max_u32 %0, %1")                                           \
+  W(add_f32, unsigned, "ds_add_f32 %0, %1")                                           \
+  A(wrxchg_rtn_b32, unsigned, "ds_wrxchg_rtn_b32 %0, %1, %2")                         \
+  A(max_rtn_u64, v2u, "ds_max_rtn_u64 %0, %1, %2")
 
 // gfx950 transpose loads: each lane supplies an address, the data returned
 // to a lane comes from several lanes' addresses.
@@ -151,12 +155,35 @@ template <typename T> __device__ T splat(unsigned x) {
     }                                                                                 \
     sink[threadIdx.x] = acc;                                                          \
   }
+#define OPS_ATOMIC2(A2)                                                               \
+  A2(cmpst_rtn_b32, unsigned, unsigned, "ds_cmpst_rtn_b32 %0, %1, %2, %3")            \
+  A2(wrxchg2_rtn_b32_o0_1, v2u, unsigned, "ds_wrxchg2_rtn_b32 %0, %1, %2, %3 offset1:1")
+#define KERNEL_A2(name, T, D, insn)                                                   \
+  __global__ void k_##name(const int *offs, int reps, unsigned *sink) {               \
+    int o = offs[threadIdx.x];                                                        \
+    unsigned acc = 0;                                                                 \
+    if (o >= 0) {                                                                     \
+      D w = threadIdx.x, x = threadIdx.x + 1;                                         \
+      for (int r = 0; r < reps; ++r) {                                                \
+        T v;                                                                          \
+        asm volatile(insn WAIT : "=v"(v) : "v"(o), "v"(w), "v"(x) : "memory");        \
+        acc += fold(v);                                                               \
+      }                                                                               \
+    }                                                                                 \
+    sink[threadIdx.x] = acc;                                                          \
+  }
+OPS_ATOMIC2(KERNEL_A2)
 #if defined(__gfx950__) || !defined(__HIP_DEVICE_COMPILE__)
 #define KERNEL_TR KERNEL_R
+#define KERNEL_TRW KERNEL_W
 #else // not encodable before gfx950: the kernel exists but traps
 #define KERNEL_TR(name, T, insn)                                                      \
   __global__ void k_##name(const int *, int, unsigned *) { __builtin_trap(); }
+#define KERNEL_TRW KERNEL_TR
 #endif
+// gfx950-only RMW (gfx942+, not gfx90a)
+#define OPS_W950(W) W(pk_add_f16, unsigned, "ds_pk_add_f16 %0, %1")
+OPS_W950(KERNEL_TRW)
 OPS(KERNEL_R, KERNEL_W)
 OPS2(KERNEL_W2)
 OPS_ATOMIC(KERNEL_W, KERNEL_A)
@@ -170,7 +197,9 @@ struct op_t {
 };
 #define ENTRY(name, T, insn) {#name, k_##name, false},
 #define ENTRY_TR(name, T, insn) {#name, k_##name, true},
-static const op_t ops[] = {OPS(ENTRY, ENTRY) OPS2(ENTRY) OPS_ATOMIC(ENTRY, ENTRY) OPS_TR(ENTRY_TR)};
+#define ENTRY2(name, T, D, insn) {#name, k_##name, false},
+static const op_t ops[] = {OPS(ENTRY, ENTRY) OPS2(ENTRY) OPS_ATOMIC(ENTRY, ENTRY) OPS_ATOMIC2(ENTRY2)
+                           OPS_TR(ENTRY_TR) OPS_W950(ENTRY_TR)};
 
 static void check(hipError_t e, const char *what) {
   if (e != hipSuccess) {

@@ -27,6 +27,7 @@ P="python3 -I $HERE/probe.py"
 align() { # natural alignment of an op's access; b96 needs 16
     case $1 in
         *_tr_b*) case $1 in *b96*) echo 16;; *) echo 8;; esac;;
+        add_*|max_*|pk_add*|wrxchg*|cmpst*) case $1 in *64*) echo 8;; *) echo 4;; esac;;
         *u8*|*i8*|*b8*) echo 1;; *u16*|*i16*|*b16*) echo 2;;
         *b32*|*u32) echo 4;; *b64*|*u64) echo 8;; *b96*|*b128*) echo 16;;
     esac
@@ -39,7 +40,7 @@ fail=0
 for op in $OPS; do
     a=$(align "$op"); s=$(size "$op")
     # Misaligned atomics hang on gfx950: keep atomic and transpose patterns aligned.
-    $P gen basic "$s" | { case $op in add_*|*_tr_*) grep -v "stride 12";; *) cat;; esac; } > "$OUT/pat/basic_$op.pat"
+    $P gen basic "$s" | { case $op in add_*|max_*|pk_add*|wrxchg*|cmpst*|*_tr_*) grep -v "stride 12";; *) cat;; esac; } > "$OUT/pat/basic_$op.pat"
     step=$a; [ "$step" -lt 4 ] && { $P gen delta 0 1 0 300 "$step" > "$OUT/pat/delta_$op.pat"; true; } \
         || $P gen delta 0 1 0 1024 "$step" > "$OUT/pat/delta_$op.pat"
     $P gen random "$a" 300 4096 7 > "$OUT/pat/random_$op.pat"
