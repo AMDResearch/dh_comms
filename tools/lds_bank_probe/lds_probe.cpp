@@ -74,7 +74,13 @@ typedef unsigned v4u __attribute__((ext_vector_type(4)));
   W(max_u32, unsigned, "ds_max_u32 %0, %1")                                           \
   W(add_f32, unsigned, "ds_add_f32 %0, %1")                                           \
   A(wrxchg_rtn_b32, unsigned, "ds_wrxchg_rtn_b32 %0, %1, %2")                         \
-  A(max_rtn_u64, v2u, "ds_max_rtn_u64 %0, %1, %2")
+  A(max_rtn_u64, v2u, "ds_max_rtn_u64 %0, %1, %2")                                   \
+  W(max_f32, unsigned, "ds_max_f32 %0, %1")                                           \
+  W(min_f32, unsigned, "ds_min_f32 %0, %1")                                           \
+  W(max_f64, v2u, "ds_max_f64 %0, %1")                                                \
+  W(add_f64, v2u, "ds_add_f64 %0, %1")                                                \
+  A(add_rtn_f64, v2u, "ds_add_rtn_f64 %0, %1, %2")                                    \
+  A(add_rtn_f32, unsigned, "ds_add_rtn_f32 %0, %1, %2")
 
 // gfx950 transpose loads: each lane supplies an address, the data returned
 // to a lane comes from several lanes' addresses.
@@ -93,7 +99,9 @@ typedef unsigned v4u __attribute__((ext_vector_type(4)));
   W2(write2_b64_o0_1, v2u, "ds_write2_b64 %0, %1, %2 offset1:1")                      \
   W2(write2_b64_o0_16, v2u, "ds_write2_b64 %0, %1, %2 offset1:16")                    \
   W2(write2_b64_o0_32, v2u, "ds_write2_b64 %0, %1, %2 offset1:32")                    \
-  W2(write2st64_b64_o0_1, v2u, "ds_write2st64_b64 %0, %1, %2 offset1:1")
+  W2(write2st64_b64_o0_1, v2u, "ds_write2st64_b64 %0, %1, %2 offset1:1")              \
+  W2(cmpst_b64, v2u, "ds_cmpst_b64 %0, %1, %2")                                       \
+  W2(mskor_b32, unsigned, "ds_mskor_b32 %0, %1, %2")
 
 template <typename T> __device__ unsigned fold(T v) {
   if constexpr (sizeof(T) == 4) return v;
@@ -157,7 +165,9 @@ template <typename T> __device__ T splat(unsigned x) {
   }
 #define OPS_ATOMIC2(A2)                                                               \
   A2(cmpst_rtn_b32, unsigned, unsigned, "ds_cmpst_rtn_b32 %0, %1, %2, %3")            \
-  A2(wrxchg2_rtn_b32_o0_1, v2u, unsigned, "ds_wrxchg2_rtn_b32 %0, %1, %2, %3 offset1:1")
+  A2(wrxchg2_rtn_b32_o0_1, v2u, unsigned, "ds_wrxchg2_rtn_b32 %0, %1, %2, %3 offset1:1") \
+  A2(cmpst_rtn_b64, v2u, v2u, "ds_cmpst_rtn_b64 %0, %1, %2, %3")                      \
+  A2(mskor_rtn_b32, unsigned, unsigned, "ds_mskor_rtn_b32 %0, %1, %2, %3")
 #define KERNEL_A2(name, T, D, insn)                                                   \
   __global__ void k_##name(const int *offs, int reps, unsigned *sink) {               \
     int o = offs[threadIdx.x];                                                        \
@@ -182,8 +192,17 @@ OPS_ATOMIC2(KERNEL_A2)
 #define KERNEL_TRW KERNEL_TR
 #endif
 // gfx950-only RMW (gfx942+, not gfx90a)
-#define OPS_W950(W) W(pk_add_f16, unsigned, "ds_pk_add_f16 %0, %1")
+#define OPS_W950(W)                                                                   \
+  W(pk_add_f16, unsigned, "ds_pk_add_f16 %0, %1")                                     \
+  W(pk_add_bf16, unsigned, "ds_pk_add_bf16 %0, %1")
 OPS_W950(KERNEL_TRW)
+#if defined(__gfx950__) || !defined(__HIP_DEVICE_COMPILE__)
+#define KERNEL_TRA KERNEL_A
+#else
+#define KERNEL_TRA KERNEL_TR
+#endif
+#define OPS_A950(A) A(pk_add_rtn_f16, unsigned, "ds_pk_add_rtn_f16 %0, %1, %2")
+OPS_A950(KERNEL_TRA)
 OPS(KERNEL_R, KERNEL_W)
 OPS2(KERNEL_W2)
 OPS_ATOMIC(KERNEL_W, KERNEL_A)
@@ -199,7 +218,7 @@ struct op_t {
 #define ENTRY_TR(name, T, insn) {#name, k_##name, true},
 #define ENTRY2(name, T, D, insn) {#name, k_##name, false},
 static const op_t ops[] = {OPS(ENTRY, ENTRY) OPS2(ENTRY) OPS_ATOMIC(ENTRY, ENTRY) OPS_ATOMIC2(ENTRY2)
-                           OPS_TR(ENTRY_TR) OPS_W950(ENTRY_TR)};
+                           OPS_TR(ENTRY_TR) OPS_W950(ENTRY_TR) OPS_A950(ENTRY_TR)};
 
 static void check(hipError_t e, const char *what) {
   if (e != hipSuccess) {
